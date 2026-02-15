@@ -4,6 +4,9 @@ Portfolio Optimizer – Pipeline Runner
 Phase 1: Load → Clean → Feature Engineer → EDA
 Phase 2: QP Solver → Backtest → Evaluate
 Phase 3: AI Supervisor → Meta-Labeling → Regime-Aware Allocation
+Phase 4: SHAP Analysis → Feature Importance
+Phase 5: Ablation Study → Feature Group Validation
+Phase 6: Synthetic Validation → Robustness Testing (Optional, slow)
 
 Run with:  python main.py
 """
@@ -33,7 +36,17 @@ from src.backtester import (
     compute_metrics, compare_benchmarks,
     compute_turnover, compute_tracking_error,
 )
-from src.supervisor import run_supervisor_pipeline
+from src.supervisor import (
+    run_supervisor_pipeline,
+    generate_meta_labels,
+    build_super_state,
+)
+from src.shap_analysis import run_shap_analysis
+from src.ablation import run_ablation_study
+from src.synthetic_validation import (
+    run_synthetic_validation,
+    plot_synthetic_validation,
+)
 from src.config import BENCHMARK, RESULTS_DIR
 
 
@@ -146,7 +159,42 @@ def phase3(clone_returns, prices_clean, econ, yield_curve):
     importances.to_csv(RESULTS_DIR / "feature_importances.csv")
     print(f"[phase3] Saved → {RESULTS_DIR / 'feature_importances.csv'}")
 
-    return supervised_returns, regime, model
+    # Build X_test for SHAP analysis
+    returns_all = prices_clean.pct_change().iloc[1:]
+    X_full = build_super_state(clone_returns, returns_all, econ, yield_curve)
+    X_test = X_full.loc[X_full.index > "2019-12-31"]
+
+    return supervised_returns, regime, model, X_test
+
+
+def phase4_shap(model, X_test):
+    """Phase 4: SHAP Analysis."""
+    shap_values = run_shap_analysis(model, X_test, save_dir=RESULTS_DIR)
+    return shap_values
+
+
+def phase5_ablation(clone_returns, prices_clean, econ, yield_curve):
+    """Phase 5: Ablation Study."""
+    returns_all = prices_clean.pct_change().iloc[1:]
+    results = run_ablation_study(
+        clone_returns, returns_all, econ, yield_curve,
+        train_end="2019-12-31", save_dir=RESULTS_DIR,
+    )
+    return results
+
+
+def phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100):
+    """Phase 6: Synthetic Validation (slow — run with small n_paths first)."""
+    returns = prices_clean.pct_change().iloc[1:]
+    results = run_synthetic_validation(
+        returns, econ, yield_curve,
+        n_paths=n_paths,
+        benchmark_col=BENCHMARK,
+        train_end="2019-12-31",
+    )
+    if len(results) > 0:
+        plot_synthetic_validation(results, save_dir=RESULTS_DIR)
+    return results
 
 
 def main():
@@ -156,16 +204,28 @@ def main():
     # Load all data
     prices, all_fields, profiles, econ, yield_curve = load_all()
 
-    # Phase 1
+    # Phase 1: Data Prep & EDA
     prices_clean, returns = phase1(prices, all_fields, profiles, econ, yield_curve)
 
-    # Phase 2
+    # Phase 2: Worker (QP Solver)
     weights_history, clone_returns = phase2(prices_clean)
 
-    # Phase 3
-    supervised_returns, regime, model = phase3(
+    # Phase 3: Supervisor (Meta-Labeling)
+    supervised_returns, regime, model, X_test = phase3(
         clone_returns, prices_clean, econ, yield_curve
     )
+
+    # Phase 4: SHAP Analysis
+    shap_values = phase4_shap(model, X_test)
+
+    # Phase 5: Ablation Study
+    ablation_results = phase5_ablation(
+        clone_returns, prices_clean, econ, yield_curve
+    )
+
+    # Phase 6: Synthetic Validation (optional — slow)
+    # Uncomment to run (takes ~30-60 min with n_paths=1000)
+    # synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100)
 
     print("\n✅ All phases complete! Check results/ for outputs.")
 
