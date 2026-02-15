@@ -323,7 +323,7 @@ This paper demonstrates that the regime-change problem in portfolio optimization
 
 The continuous meta-labeling approach---where the Supervisor outputs a smooth confidence score rather than a binary regime switch---produces smoother allocation transitions and reduces turnover costs. Crucially, our synthetic validation framework (1{,}000 bootstrapped market histories) provides evidence that the strategy's risk-adjusted outperformance is not an artifact of overfitting to a single historical sequence, but reflects genuinely learned regime structure.
 
-Future work includes extending the framework to true Conditional Portfolio Optimization \cite{chan2023}, where the Supervisor directly optimizes over the full weight space rather than modulating a single aggressiveness parameter, and applying the architecture to alternative asset universes to demonstrate generalizability.
+Future work includes extending the framework to true Conditional Portfolio Optimization \cite{chan2023}, where the Supervisor directly optimizes over the full weight space rather than modulating a single aggressiveness parameter, and applying the architecture to alternative asset universes to demonstrate generalizability. Additionally, we plan to model the Worker's tracking error as an \textbf{Ornstein-Uhlenbeck (OU) process} ($dX_t = \theta(\mu - X_t)\,dt + \sigma\,dW_t$), where the mean-reversion speed $\theta$ and volatility $\sigma$ provide a principled, continuous-time signal for the Supervisor's confidence calibration---when the estimated OU half-life is short (fast mean-reversion), the Supervisor can maintain higher confidence in the Worker's output, and vice versa.
 
 
 \bibliographystyle{IEEEtran}

@@ -16,12 +16,10 @@ Validation           → Tested on 1,000 synthetic market histories
 ## Setup
 
 ```bash
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # Mac/Linux
+# Install dependencies with uv (fast)
+uv sync
 
-# Install dependencies
+# Or with pip (slower)
 pip install -r requirements.txt
 ```
 
@@ -70,6 +68,10 @@ PortfolioOptimizer-pt-2/
 ## Data
 
 All market data sourced from **Bloomberg Terminal** at Ivey Business School:
+
+https://drive.google.com/drive/folders/1cgXNTCe2qkbtR56CPsRL1uga2PDuqypV
+
+
 - **30+ TSX 60 equities** + SPY benchmark (2010–2026)
 - **Macro indicators**: VIX, yield curve, credit spreads, MOVE, DXY
 - Fields: PX_LAST, TOT_RETURN_INDEX_GROSS_DVDS, PX_VOLUME, CUR_MKT_CAP, PE_RATIO
