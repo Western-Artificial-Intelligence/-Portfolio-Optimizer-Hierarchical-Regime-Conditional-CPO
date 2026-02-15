@@ -1,0 +1,9 @@
+.env
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+results/
+
