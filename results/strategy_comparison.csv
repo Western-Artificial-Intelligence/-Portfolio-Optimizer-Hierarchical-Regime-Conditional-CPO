@@ -1,0 +1,4 @@
+Name,Ann Return (%),Ann Vol (%),Sharpe,Sortino,Max DD (%),Calmar,Skewness,Kurtosis,Tracking Error (%),Corr w/ SPY
+Canadian Clone (QP),7.84,13.15,0.444,0.432,-37.78,0.208,-0.941,45.807,12.3,0.701
+SPY Buy & Hold,12.48,17.08,0.613,0.749,-34.1,0.366,-0.332,12.281,0.0,1.0
+Equal-Weight TSX,15.26,13.97,0.949,1.147,-35.98,0.424,-0.886,25.43,10.54,0.787
