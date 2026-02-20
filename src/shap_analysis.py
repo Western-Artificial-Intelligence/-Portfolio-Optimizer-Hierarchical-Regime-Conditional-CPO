@@ -46,9 +46,23 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
     print("SHAP ANALYSIS — Feature Importance")
     print("=" * 60)
 
+    # Ensure numeric types (SHAP fails on object/string columns)
+    X_test = X_test.copy()
+    for col in X_test.columns:
+        if X_test[col].dtype in (object, "object", "string"):
+            X_test[col] = pd.to_numeric(X_test[col], errors="coerce")
+
     # Compute SHAP values
-    explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test)
+    try:
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_test)
+    except (ValueError, TypeError) as e:
+        if "convert string to float" in str(e).lower() or "base_score" in str(e).lower():
+            raise RuntimeError(
+                "SHAP is incompatible with XGBoost 3.1+. Pin xgboost<3.1.0: "
+                "uv add 'xgboost>=2.0.0,<3.1.0' or pip install 'xgboost>=2.0.0,<3.1.0'"
+            ) from e
+        raise
 
     # ── 1. Beeswarm Plot (Global Feature Importance) ──
     print("[shap] Generating beeswarm plot...")

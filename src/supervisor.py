@@ -18,6 +18,7 @@ import pandas as pd
 import numpy as np
 from xgboost import XGBClassifier
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.dummy import DummyClassifier
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score,
     f1_score, roc_auc_score, classification_report,
@@ -30,7 +31,7 @@ from src.forecaster import compute_uncertainty_features
 # 1. Meta-Label Generation
 # ──────────────────────────────────────────────
 
-def generate_meta_labels(clone_returns, threshold=0.02, horizon=5):
+def generate_meta_labels(clone_returns, threshold=0.02, horizon=5, verbose=True):
     """
     Generate binary meta-labels for the AI Supervisor.
 
@@ -64,11 +65,12 @@ def generate_meta_labels(clone_returns, threshold=0.02, horizon=5):
         labels.iloc[i] = 1 if drawdown > -threshold else 0  # 1=safe, 0=danger
 
     labels = labels.dropna()
-    n_danger = (labels == 0).sum()
-    n_safe = (labels == 1).sum()
-    print(f"[supervisor] Meta-labels: {len(labels)} total, "
-          f"{n_safe} safe ({n_safe/len(labels)*100:.1f}%), "
-          f"{n_danger} danger ({n_danger/len(labels)*100:.1f}%)")
+    if verbose:
+        n_danger = (labels == 0).sum()
+        n_safe = (labels == 1).sum()
+        print(f"[supervisor] Meta-labels: {len(labels)} total, "
+              f"{n_safe} safe ({n_safe/len(labels)*100:.1f}%), "
+              f"{n_danger} danger ({n_danger/len(labels)*100:.1f}%)")
 
     return labels
 
@@ -77,7 +79,7 @@ def generate_meta_labels(clone_returns, threshold=0.02, horizon=5):
 # 2. Super-State Feature Engineering
 # ──────────────────────────────────────────────
 
-def build_super_state(clone_returns, returns_all, econ, yield_curve):
+def build_super_state(clone_returns, returns_all, econ, yield_curve, verbose=True):
     """
     Build the complete super-state feature matrix.
 
@@ -95,12 +97,12 @@ def build_super_state(clone_returns, returns_all, econ, yield_curve):
     features = {}
 
     # ── Uncertainty features ──
-    uncertainty = compute_uncertainty_features(returns_all)
+    uncertainty = compute_uncertainty_features(returns_all, verbose=verbose)
     for col in uncertainty.columns:
         features[col] = uncertainty[col]
 
     # ── Macro indicators ──
-    econ_aligned = econ.reindex(clone_returns.index, method="ffill")
+    econ_aligned = econ.reindex(clone_returns.index, method="ffill").bfill()
     for col in econ_aligned.columns:
         # Raw level
         features[f"macro_{col}"] = econ_aligned[col]
@@ -109,7 +111,7 @@ def build_super_state(clone_returns, returns_all, econ, yield_curve):
         features[f"macro_{col}_chg_21d"] = econ_aligned[col].pct_change(21)
 
     # ── Yield curve ──
-    yc_aligned = yield_curve.reindex(clone_returns.index, method="ffill")
+    yc_aligned = yield_curve.reindex(clone_returns.index, method="ffill").bfill()
     if "YIELD_CURVE_SPREAD" in yc_aligned.columns:
         features["yc_spread"] = yc_aligned["YIELD_CURVE_SPREAD"]
         features["yc_spread_chg_5d"] = yc_aligned["YIELD_CURVE_SPREAD"].pct_change(5)
@@ -123,11 +125,22 @@ def build_super_state(clone_returns, returns_all, econ, yield_curve):
 
     X = pd.DataFrame(features, index=clone_returns.index)
 
+    # Replace inf with NaN (e.g. from relative_vol when vol near zero)
+    X = X.replace([np.inf, -np.inf], np.nan)
+
+    # Drop columns that are entirely NaN (e.g. vol_of_vol_63d with insufficient warmup)
+    all_nan_cols = X.columns[X.isna().all()].tolist()
+    if all_nan_cols:
+        X = X.drop(columns=all_nan_cols)
+        if verbose:
+            print(f"[supervisor] Dropped {len(all_nan_cols)} all-NaN columns: {all_nan_cols}")
+
     # Drop early rows with NaN from rolling calculations
     X = X.dropna()
 
-    print(f"[supervisor] Super-state features: {X.shape[1]} columns, "
-          f"{X.shape[0]} rows")
+    if verbose:
+        print(f"[supervisor] Super-state features: {X.shape[1]} columns, "
+              f"{X.shape[0]} rows")
 
     return X
 
@@ -136,7 +149,7 @@ def build_super_state(clone_returns, returns_all, econ, yield_curve):
 # 3. XGBoost Classifier (TimeSeriesSplit CV)
 # ──────────────────────────────────────────────
 
-def train_classifier(X, y, n_splits=5):
+def train_classifier(X, y, n_splits=5, verbose=True):
     """
     Train an XGBoost classifier with time-series cross-validation.
 
@@ -161,18 +174,29 @@ def train_classifier(X, y, n_splits=5):
     X_aligned = X.loc[common]
     y_aligned = y.loc[common]
 
-    print(f"\n[supervisor] Training XGBoost on {len(X_aligned)} samples, "
-          f"{X_aligned.shape[1]} features")
+    if verbose:
+        print(f"\n[supervisor] Training XGBoost on {len(X_aligned)} samples, "
+              f"{X_aligned.shape[1]} features")
 
     # Class imbalance handling — upweight the minority class (danger)
     n_pos = int((y_aligned == 1).sum())
     n_neg = int((y_aligned == 0).sum())
     scale_pos_weight = n_pos / n_neg if n_neg > 0 else 1.0
-    print(f"[supervisor] Class balance: {n_pos} safe / {n_neg} danger "
-          f"(scale_pos_weight={scale_pos_weight:.2f})")
+    if verbose:
+        print(f"[supervisor] Class balance: {n_pos} safe / {n_neg} danger "
+              f"(scale_pos_weight={scale_pos_weight:.2f})")
 
     # Ensure labels are int (XGBoost requires clean integer classes)
     y_aligned = y_aligned.astype(int)
+
+    # Single-class fallback: XGBoost fails with one class; use DummyClassifier
+    if len(np.unique(y_aligned)) < 2:
+        majority = int(y_aligned.mode().iloc[0])
+        fallback = DummyClassifier(strategy="constant", constant=majority)
+        fallback.fit(X_aligned, y_aligned)
+        cv_metrics = {"accuracy": [1.0], "precision": [1.0], "recall": [1.0],
+                      "f1": [1.0], "auc": [0.5]}
+        return fallback, cv_metrics
 
     # TimeSeriesSplit CV
     tscv = TimeSeriesSplit(n_splits=n_splits)
@@ -185,7 +209,8 @@ def train_classifier(X, y, n_splits=5):
 
         # Skip folds where train or val has only one class
         if len(y_train.unique()) < 2 or len(y_val.unique()) < 2:
-            print(f"  [fold {fold+1}] Skipped — single class in train or val")
+            if verbose:
+                print(f"  [fold {fold+1}] Skipped — single class in train or val")
             continue
 
         model = XGBClassifier(
@@ -214,12 +239,12 @@ def train_classifier(X, y, n_splits=5):
         except ValueError:
             cv_metrics["auc"].append(0.5)
 
-    # Print CV results
-    print(f"\n[supervisor] Cross-Validation Results ({n_splits}-fold TimeSeriesSplit):")
-    for metric, values in cv_metrics.items():
-        mean_val = np.mean(values)
-        std_val = np.std(values)
-        print(f"  {metric:>10s}: {mean_val:.4f} ± {std_val:.4f}")
+    if verbose:
+        print(f"\n[supervisor] Cross-Validation Results ({n_splits}-fold TimeSeriesSplit):")
+        for metric, values in cv_metrics.items():
+            mean_val = np.mean(values)
+            std_val = np.std(values)
+            print(f"  {metric:>10s}: {mean_val:.4f} ± {std_val:.4f}")
 
     # Final model: train on all data
     final_model = XGBClassifier(
@@ -294,9 +319,9 @@ def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0):
 
     print(f"\n[supervisor] Continuous Blending Summary:")
     print(f"  Average confidence:  {avg_P:.3f}")
-    print(f"  🟢 Aggressive (P>0.7): {agg_pct:.1f}%")
-    print(f"  🟡 Moderate  (0.3-0.7): {mod_pct:.1f}%")
-    print(f"  🔴 Defensive (P<0.3):  {def_pct:.1f}%")
+    print(f"  [Aggressive] (P>0.7): {agg_pct:.1f}%")
+    print(f"  [Moderate]  (0.3-0.7): {mod_pct:.1f}%")
+    print(f"  [Defensive] (P<0.3):  {def_pct:.1f}%")
 
     return supervised_returns, regime, P
 
@@ -355,6 +380,10 @@ def run_supervisor_pipeline(clone_returns, returns_all, econ, yield_curve,
 
     print(f"\n[supervisor] Train: {len(X_train)} samples ({X_train.index.min().date()} → {X_train.index.max().date()})")
     print(f"[supervisor] Test:  {len(X_test)} samples ({X_test.index.min().date()} → {X_test.index.max().date()})")
+
+    print(f"X_train date range: {X_train.index.min()} → {X_train.index.max()}, n={len(X_train)}")
+    print(f"y_train date range: {y_train.index.min()} → {y_train.index.max()}, n={len(y_train)}")
+    print(f"Intersection: {len(X_train.index.intersection(y_train.index))}")
 
     # Step 4: Train on training data only
     model, cv_results = train_classifier(X_train, y_train)

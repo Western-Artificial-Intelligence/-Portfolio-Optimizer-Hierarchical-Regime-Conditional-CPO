@@ -95,9 +95,13 @@ def stationary_block_bootstrap(returns, n_paths=1000, avg_block_len=21,
 # ──────────────────────────────────────────────
 
 def _run_pipeline_on_path(synthetic_returns, econ, yield_curve,
-                           benchmark_col, train_end="2019-12-31"):
+                           benchmark_col, train_frac=0.6,
+                           min_train=15, min_test=3, verbose=False):
     """
     Run the full Worker + Supervisor pipeline on one synthetic history.
+
+    Uses relative time split (train_frac) instead of fixed date, since
+    synthetic paths share the same calendar but econ/yc may have limited range.
 
     Returns metrics dict or None if pipeline fails.
     """
@@ -112,33 +116,38 @@ def _run_pipeline_on_path(synthetic_returns, econ, yield_curve,
             synthetic_prices,
             benchmark_col=benchmark_col,
             lookback=252 * 5,
-            rebal_freq="M",
+            rebal_freq="ME",
         )
 
         if len(worker_returns) < 252:  # Need at least 1 year
             return None
 
-        # Supervisor: Meta-labeling
-        labels = generate_meta_labels(worker_returns, threshold=0.02, horizon=5)
-        X = build_super_state(worker_returns, synthetic_returns, econ, yield_curve)
+        # Supervisor: Meta-labeling (verbose=False for batch)
+        labels = generate_meta_labels(worker_returns, threshold=0.02, horizon=5, verbose=verbose)
+        X = build_super_state(worker_returns, synthetic_returns, econ, yield_curve, verbose=verbose)
 
         common = X.index.intersection(labels.index)
         X = X.loc[common]
         y = labels.loc[common]
 
-        train_mask = X.index <= train_end
-        test_mask = X.index > train_end
+        # Relative split: first train_frac for train, rest for test
+        n = len(X)
+        n_train = int(n * train_frac)
+        n_test = n - n_train
 
-        X_train, y_train = X.loc[train_mask], y.loc[train_mask]
-        X_test = X.loc[test_mask]
+        X_train, y_train = X.iloc[:n_train], y.iloc[:n_train]
+        X_test = X.iloc[n_train:]
 
-        if len(X_train) < 100 or len(X_test) < 50:
+        if len(X_train) < min_train or len(X_test) < min_test:
             return None
 
-        model, _ = train_classifier(X_train, y_train, n_splits=3)
+        model, _ = train_classifier(X_train, y_train, n_splits=3, verbose=verbose)
 
+        proba = model.predict_proba(X_test)
+        # Handle single-class DummyClassifier: proba has shape (n, 1) not (n, 2)
+        conf_col = min(1, proba.shape[1] - 1)
         confidence_test = pd.Series(
-            model.predict_proba(X_test)[:, 1],
+            proba[:, conf_col],
             index=X_test.index,
         )
 
@@ -166,6 +175,68 @@ def _run_pipeline_on_path(synthetic_returns, econ, yield_curve,
         return None
 
 
+def _run_pipeline_on_path_debug(synthetic_returns, econ, yield_curve,
+                                 benchmark_col, train_frac=0.6,
+                                 min_train=15, min_test=3):
+    """Debug version: raises on first failure to surface the actual error."""
+    # Reconstruct prices from returns
+    synthetic_prices = (1 + synthetic_returns).cumprod()
+    synthetic_prices = synthetic_prices * 100
+
+    weights_history, worker_returns = rolling_optimization(
+        synthetic_prices,
+        benchmark_col=benchmark_col,
+        lookback=252 * 5,
+        rebal_freq="ME",
+    )
+
+    if len(worker_returns) < 252:
+        raise ValueError(f"worker_returns too short: {len(worker_returns)} < 252")
+
+    labels = generate_meta_labels(worker_returns, threshold=0.02, horizon=5)
+    X = build_super_state(worker_returns, synthetic_returns, econ, yield_curve)
+
+    common = X.index.intersection(labels.index)
+    X = X.loc[common]
+    y = labels.loc[common]
+
+    n = len(X)
+    n_train = int(n * train_frac)
+    X_train, y_train = X.iloc[:n_train], y.iloc[:n_train]
+    X_test = X.iloc[n_train:]
+
+    if len(X_train) < min_train or len(X_test) < min_test:
+        raise ValueError(
+            f"Insufficient train/test: X_train={len(X_train)}, X_test={len(X_test)} "
+            f"(need >={min_train} train, >={min_test} test). "
+            f"Total common samples: {n}. Check econ/yield_curve date range vs returns."
+        )
+
+    model, _ = train_classifier(X_train, y_train, n_splits=3)
+    proba = model.predict_proba(X_test)
+    conf_col = min(1, proba.shape[1] - 1)
+    confidence_test = pd.Series(
+        proba[:, conf_col],
+        index=X_test.index,
+    )
+    test_worker = worker_returns.loc[confidence_test.index]
+    supervised_returns, _, _ = apply_supervisor(test_worker, confidence_test)
+    spy_returns = synthetic_returns[benchmark_col].loc[confidence_test.index]
+
+    cpo_metrics = compute_metrics(supervised_returns)
+    worker_metrics = compute_metrics(test_worker)
+    benchmark_metrics = compute_metrics(spy_returns)
+
+    return {
+        "cpo_sharpe": cpo_metrics.get("Sharpe", np.nan),
+        "cpo_maxdd": cpo_metrics.get("Max Drawdown", np.nan),
+        "worker_sharpe": worker_metrics.get("Sharpe", np.nan),
+        "worker_maxdd": worker_metrics.get("Max Drawdown", np.nan),
+        "benchmark_sharpe": benchmark_metrics.get("Sharpe", np.nan),
+        "benchmark_maxdd": benchmark_metrics.get("Max Drawdown", np.nan),
+    }
+
+
 # ──────────────────────────────────────────────
 # 3. Full Synthetic Validation
 # ──────────────────────────────────────────────
@@ -173,10 +244,13 @@ def _run_pipeline_on_path(synthetic_returns, econ, yield_curve,
 def run_synthetic_validation(returns, econ, yield_curve,
                               n_paths=100, avg_block_len=21,
                               benchmark_col="SPY US Equity",
-                              train_end="2019-12-31",
-                              seed=42, verbose=True):
+                              train_frac=0.6, min_train=15, min_test=3,
+                              seed=42, verbose=True, min_successful=None):
     """
     Run the full synthetic validation framework.
+
+    Uses relative time split (train_frac) since econ/yc may have limited
+    date range vs returns; fixed-date split can yield 0 test samples.
 
     Parameters
     ----------
@@ -192,12 +266,16 @@ def run_synthetic_validation(returns, econ, yield_curve,
         Average bootstrap block length in days.
     benchmark_col : str
         Column name for benchmark.
-    train_end : str
-        Training period cutoff.
+    train_frac : float
+        Fraction of common samples for training (default 0.8).
+    min_train, min_test : int
+        Minimum samples required for train and test.
     seed : int
         Random seed.
     verbose : bool
         Print progress.
+    min_successful : int, optional
+        If set, keep generating paths until at least this many succeed.
 
     Returns
     -------
@@ -208,45 +286,81 @@ def run_synthetic_validation(returns, econ, yield_curve,
         print("\n" + "=" * 60)
         print("SYNTHETIC VALIDATION (Chan 2018)")
         print("=" * 60)
-        print(f"Generating {n_paths} synthetic market histories...")
-
-    # Generate synthetic paths
-    synthetic_paths = stationary_block_bootstrap(
-        returns, n_paths=n_paths, avg_block_len=avg_block_len, seed=seed
-    )
-
-    if verbose:
-        print(f"Running full pipeline on each path...")
 
     results = []
-    successes = 0
+    total_run = 0
+    current_seed = seed
 
-    for i, syn_returns in enumerate(synthetic_paths):
-        # Suppress print output during batch runs
+    while True:
+        batch_size = n_paths if min_successful is None else max(n_paths, min_successful * 2)
+        if verbose:
+            print(f"Generating {batch_size} synthetic market histories (seed={current_seed})...")
+
+        synthetic_paths = stationary_block_bootstrap(
+            returns, n_paths=batch_size, avg_block_len=avg_block_len, seed=current_seed
+        )
+
+        if verbose:
+            print(f"Running full pipeline on each path...")
+
+        for i, syn_returns in enumerate(synthetic_paths):
+            # Suppress print output during batch runs
+            import io, sys
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+
+            result = _run_pipeline_on_path(
+                syn_returns, econ, yield_curve,
+                benchmark_col=benchmark_col,
+                train_frac=train_frac,
+                min_train=min_train,
+                min_test=min_test,
+                verbose=False,
+            )
+
+            sys.stdout = old_stdout
+
+            if result is not None:
+                results.append(result)
+
+            total_run += 1
+            if verbose and total_run % 10 == 0:
+                print(f"  Completed {total_run} paths ({len(results)} successful)")
+
+        if min_successful is None or len(results) >= min_successful:
+            break
+        current_seed += 1
+        if verbose:
+            print(f"  Need {min_successful - len(results)} more. Trying new seed...")
+
+    results_df = pd.DataFrame(results)
+    if min_successful is not None and len(results_df) > min_successful:
+        results_df = results_df.head(min_successful)
+
+    # If all paths failed, run first path in debug mode to surface the actual error
+    if len(results_df) == 0 and verbose and len(synthetic_paths) > 0:
+        print("\n[synthetic] All paths failed. Running first path in debug mode...")
         import io, sys
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
-
-        result = _run_pipeline_on_path(
-            syn_returns, econ, yield_curve,
-            benchmark_col=benchmark_col,
-            train_end=train_end,
-        )
-
-        sys.stdout = old_stdout
-
-        if result is not None:
-            results.append(result)
-            successes += 1
-
-        if verbose and (i + 1) % 10 == 0:
-            print(f"  Completed {i+1}/{n_paths} "
-                  f"({successes} successful)")
-
-    results_df = pd.DataFrame(results)
+        try:
+            _run_pipeline_on_path_debug(
+                synthetic_paths[0], econ, yield_curve,
+                benchmark_col=benchmark_col,
+                train_frac=train_frac,
+                min_train=min_train,
+                min_test=min_test,
+            )
+        except Exception as e:
+            sys.stdout = old_stdout
+            print(f"\n[synthetic] First path failed with: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+        else:
+            sys.stdout = old_stdout
 
     if verbose and len(results_df) > 0:
-        print(f"\n[synthetic] Completed: {len(results_df)}/{n_paths} successful")
+        print(f"\n[synthetic] Completed: {len(results_df)} successful (ran {total_run} paths)")
         print(f"\n[synthetic] Sharpe Ratio Summary:")
         print(f"  CPO Model:    {results_df['cpo_sharpe'].mean():.3f} "
               f"± {results_df['cpo_sharpe'].std():.3f}")
