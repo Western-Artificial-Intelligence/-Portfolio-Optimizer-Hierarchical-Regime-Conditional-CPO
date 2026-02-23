@@ -1,0 +1,6 @@
+,Check
+0,"✓ Skipping rebalance-only check: vol_dampening=True, dd_circuit_breaker=True adjust alpha daily using trailing data."
+1,✓ All rebalance dates are actual trading days.
+2,✓ First non-trivial alpha at index 1284 (≥ L/2=126).
+3,✓ Skipping forward-fill check: daily adjustments (dampening/circuit-breaker) modify alpha between rebalances.
+4,"✓ Vol dampening uses trailing 20-day window (backward-looking, no future data)."

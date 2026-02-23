@@ -31,7 +31,7 @@ def load_stock_history(filepath=None):
     prices : pd.DataFrame
         DatetimeIndex × tickers, containing PX_LAST (close prices).
     all_fields : dict[str, pd.DataFrame]
-        Mapping from field name → DataFrame (DatetimeIndex × tickers).
+        Mapping from field name -> DataFrame (DatetimeIndex x tickers).
     """
     filepath = filepath or STOCK_HISTORY_CSV
 
@@ -69,7 +69,7 @@ def load_stock_history(filepath=None):
 
     print(f"[data_loader] Loaded stock history: {len(dates)} trading days, "
           f"{prices.shape[1]} tickers, {len(all_fields)} fields")
-    print(f"[data_loader] Date range: {dates.min().date()} → {dates.max().date()}")
+    print(f"[data_loader] Date range: {dates.min().date()} to {dates.max().date()}")
 
     return prices, all_fields
 
@@ -111,6 +111,7 @@ def load_economic_indicators(filepath=None):
 
     econ = pd.read_csv(filepath, parse_dates=["date"], index_col="date")
     econ.sort_index(inplace=True)
+    assert isinstance(econ.index, pd.DatetimeIndex), "Economic indicators must have DatetimeIndex for super-state alignment."
 
     # Forward-fill missing values (weekends/holidays in macro data)
     econ = econ.ffill()
@@ -122,7 +123,7 @@ def load_economic_indicators(filepath=None):
 
     print(f"[data_loader] Loaded economic indicators: {len(econ)} rows, "
           f"{econ.shape[1]} columns")
-    print(f"[data_loader] Date range: {econ.index.min().date()} → {econ.index.max().date()}")
+    print(f"[data_loader] Date range: {econ.index.min().date()} to {econ.index.max().date()}")
 
     return econ
 
@@ -140,6 +141,7 @@ def load_yield_curve(filepath=None):
 
     yc = pd.read_csv(filepath, parse_dates=["date"], index_col="date")
     yc.sort_index(inplace=True)
+    assert isinstance(yc.index, pd.DatetimeIndex), "Yield curve must have DatetimeIndex for super-state alignment."
 
     print(f"[data_loader] Loaded yield curve: {len(yc)} rows")
     print(f"[data_loader] Inversions detected: "
@@ -178,14 +180,14 @@ def load_all():
     coverage = prices.notna().mean()
     sparse = coverage[coverage < 0.5]
     if len(sparse) > 0:
-        print(f"\n⚠️  Sparse tickers (< 50% coverage):")
+        print(f"\n[WARNING] Sparse tickers (< 50% coverage):")
         for ticker, pct in sparse.items():
             print(f"   {ticker}: {pct*100:.1f}% data available")
 
     full = coverage[coverage >= 0.5]
-    print(f"\n✅ Tickers with good coverage (≥ 50%): {len(full)}")
-    print(f"✅ Total trading days: {len(prices)}")
-    print(f"✅ Economic indicator rows: {len(econ)}")
-    print(f"✅ Yield curve rows: {len(yield_curve)}")
+    print(f"\n[OK] Tickers with good coverage (>= 50%): {len(full)}")
+    print(f"[OK] Total trading days: {len(prices)}")
+    print(f"[OK] Economic indicator rows: {len(econ)}")
+    print(f"[OK] Yield curve rows: {len(yield_curve)}")
 
     return prices, all_fields, profiles, econ, yield_curve

@@ -64,6 +64,8 @@ For each trading day, we look ahead 5 days:
 - Handles class imbalance via `scale_pos_weight`
 - Outputs continuous probability `P = predict_proba()`
 
+**Data flow (Chunk 5):** `clone_returns`, `returns_all`, `econ`, and `yield_curve` must have **DatetimeIndex** and overlapping date ranges so the super-state can align. Use the same `prices_clean` from Phase 1 for both Phase 2 (so `clone_returns` comes from it) and Phase 3’s `returns_all = prices_clean.pct_change().iloc[1:]`, so indices stay consistent.
+
 ### 4. Continuous Blending Execution
 The final allocation smoothly blends between aggressive and defensive:
 ```

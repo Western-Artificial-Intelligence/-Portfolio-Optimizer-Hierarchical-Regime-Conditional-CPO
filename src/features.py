@@ -67,7 +67,7 @@ def merge_macro(returns, econ, yield_curve):
     for col in yc_aligned.columns:
         merged[f"yc_{col}"] = yc_aligned[col]
 
-    print(f"[features] Merged dataset: {merged.shape[0]} rows × {merged.shape[1]} columns")
+    print(f"[features] Merged dataset: {merged.shape[0]} rows x {merged.shape[1]} columns")
     return merged
 
 
@@ -88,16 +88,16 @@ def compute_rolling_stats(returns, benchmark_col="SPY US Equity",
     Returns
     -------
     rolling_vol : dict[int, pd.DataFrame]
-        Mapping from window → rolling volatility DataFrame.
+        Mapping from window -> rolling volatility DataFrame.
     rolling_corr : dict[int, pd.Series]
-        Mapping from window → rolling correlation to benchmark.
+        Mapping from window -> rolling correlation to benchmark.
     """
     rolling_vol = {}
     rolling_corr = {}
 
     benchmark = returns.get(benchmark_col)
     if benchmark is None:
-        print(f"[features] ⚠️ Benchmark '{benchmark_col}' not found, skipping correlations")
+        print(f"[features] [WARNING] Benchmark '{benchmark_col}' not found, skipping correlations")
         benchmark = None
 
     canadian = returns.drop(columns=[benchmark_col], errors="ignore")
@@ -128,7 +128,7 @@ def compute_rolling_correlation_fast(returns, benchmark_col="SPY US Equity",
     Returns
     -------
     corr_dict : dict[int, pd.DataFrame]
-        window → DataFrame of rolling correlations to benchmark.
+        window -> DataFrame of rolling correlations to benchmark.
     """
     benchmark = returns[benchmark_col]
     canadian = returns.drop(columns=[benchmark_col], errors="ignore")
@@ -161,6 +161,6 @@ def filter_sparse_tickers(prices, min_coverage=0.5):
 
     if removed:
         print(f"[features] Removed {len(removed)} sparse tickers: {removed}")
-    print(f"[features] Kept {len(keep)} tickers with ≥{min_coverage*100:.0f}% coverage")
+    print(f"[features] Kept {len(keep)} tickers with >={min_coverage*100:.0f}% coverage")
 
     return filtered, removed

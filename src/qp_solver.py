@@ -67,7 +67,7 @@ def optimize_tracking(returns_canadian, returns_spy, max_weight=MAX_WEIGHT):
     problem.solve(solver=cp.OSQP, warm_start=True, verbose=False)
 
     if problem.status not in ("optimal", "optimal_inaccurate"):
-        print(f"[qp_solver] ⚠️ Solver status: {problem.status}")
+        print(f"[qp_solver] [WARNING] Solver status: {problem.status}")
         return pd.Series(np.zeros(n_assets), index=tickers), np.nan, problem.status
 
     weights = pd.Series(w.value, index=tickers)

@@ -26,6 +26,7 @@ from src.eda import (
     plot_regime_indicators,
     print_summary_stats,
     plot_clone_vs_spy,
+    plot_clone_spy_equalweight,
     plot_tracking_error,
     plot_weight_evolution,
     plot_supervisor_decisions,
@@ -43,6 +44,7 @@ from src.supervisor import (
 )
 from src.shap_analysis import run_shap_analysis
 from src.ablation import run_ablation_study
+from src.benchmarks import run_all_benchmarks
 from src.synthetic_validation import (
     run_synthetic_validation,
     plot_synthetic_validation,
@@ -85,7 +87,7 @@ def phase2(prices_clean):
     )
 
     # Get SPY returns for comparison
-    spy_returns = prices_clean[BENCHMARK].pct_change().iloc[1:]
+    spy_returns = prices_clean[BENCHMARK].pct_change(fill_method=None).iloc[1:]
 
     # Compute turnover
     avg_turnover = compute_turnover(weights_history)
@@ -97,7 +99,7 @@ def phase2(prices_clean):
 
     # Equal-weight benchmark
     canadian_prices = prices_clean.drop(columns=[BENCHMARK], errors="ignore")
-    ew_returns = canadian_prices.pct_change().iloc[1:].mean(axis=1)
+    ew_returns = canadian_prices.pct_change(fill_method=None).iloc[1:].mean(axis=1)
 
     results = {
         "Canadian Clone (QP)": clone_returns,
@@ -107,11 +109,12 @@ def phase2(prices_clean):
     comparison = compare_benchmarks(results, spy_returns)
 
     comparison.to_csv(RESULTS_DIR / "strategy_comparison.csv")
-    print(f"\n[phase2] Saved → {RESULTS_DIR / 'strategy_comparison.csv'}")
+    print(f"\n[phase2] Saved: {RESULTS_DIR / 'strategy_comparison.csv'}")
 
     # Phase 2 plots
     print("\nGenerating Phase 2 plots...")
     plot_clone_vs_spy(clone_returns, spy_returns)
+    plot_clone_spy_equalweight(clone_returns, spy_returns, ew_returns)
     plot_tracking_error(clone_returns, spy_returns)
     plot_weight_evolution(weights_history)
 
@@ -122,7 +125,7 @@ def phase3(clone_returns, prices_clean, econ, yield_curve):
     """Phase 3: AI Supervisor — Meta-Labeling."""
 
     # Get all returns for uncertainty computation
-    returns_all = prices_clean.pct_change().iloc[1:]
+    returns_all = prices_clean.pct_change(fill_method=None).iloc[1:]
 
     # Run supervisor pipeline (train up to 2019, test 2020+)
     supervised_returns, regime, model, confidence, importances, allocation = (
@@ -133,22 +136,36 @@ def phase3(clone_returns, prices_clean, econ, yield_curve):
     )
 
     # Get SPY returns for comparison
-    spy_returns = prices_clean[BENCHMARK].pct_change().iloc[1:]
+    spy_returns = prices_clean[BENCHMARK].pct_change(fill_method=None).iloc[1:]
 
     # Compare all strategies on the test period
     test_start = supervised_returns.index[0]
     test_clone = clone_returns.loc[test_start:]
     test_spy = spy_returns.loc[test_start:]
 
+    # Run all benchmark strategies
+    canadian_prices = prices_clean.drop(columns=[BENCHMARK], errors="ignore")
+    benchmarks = run_all_benchmarks(
+        clone_returns, spy_returns, canadian_prices,
+        test_start=str(test_start.date())
+    )
+
+    # Combine all results for comparison
     results = {
         "Clone + AI Supervisor": supervised_returns,
         "Clone (unsupervised)": test_clone,
         "SPY Buy & Hold": test_spy,
     }
+    # Add benchmark strategies
+    for name, returns in benchmarks.items():
+        # Align to test period
+        aligned = returns.loc[returns.index >= test_start]
+        results[name] = aligned
+
     comparison = compare_benchmarks(results, test_spy)
 
     comparison.to_csv(RESULTS_DIR / "phase3_comparison.csv")
-    print(f"\n[phase3] Saved → {RESULTS_DIR / 'phase3_comparison.csv'}")
+    print(f"\n[phase3] Saved: {RESULTS_DIR / 'phase3_comparison.csv'}")
 
     # Phase 3 plots
     print("\nGenerating Phase 3 plots...")
@@ -157,7 +174,7 @@ def phase3(clone_returns, prices_clean, econ, yield_curve):
 
     # Save feature importances
     importances.to_csv(RESULTS_DIR / "feature_importances.csv")
-    print(f"[phase3] Saved → {RESULTS_DIR / 'feature_importances.csv'}")
+    print(f"[phase3] Saved: {RESULTS_DIR / 'feature_importances.csv'}")
 
     # Build X_test for SHAP analysis
     returns_all = prices_clean.pct_change().iloc[1:]
@@ -198,7 +215,7 @@ def phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100):
 
 
 def main():
-    print("🚀 Portfolio Optimizer – Full Pipeline")
+    print("Portfolio Optimizer - Full Pipeline")
     print("=" * 60)
 
     # Load all data
@@ -227,7 +244,7 @@ def main():
     # Uncomment to run (takes ~30-60 min with n_paths=1000)
     # synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100)
 
-    print("\n✅ All phases complete! Check results/ for outputs.")
+    print("\n[OK] All phases complete! Check results/ for outputs.")
 
 
 if __name__ == "__main__":

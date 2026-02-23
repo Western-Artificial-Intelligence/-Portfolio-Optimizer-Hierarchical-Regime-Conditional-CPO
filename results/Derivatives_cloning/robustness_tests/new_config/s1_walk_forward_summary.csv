@@ -1,0 +1,5 @@
+,Tracking Error (%),Tracking Error (%),Tracking Error (%),Tracking Error (%),Beta,Beta,Beta,Beta,Correlation,Correlation,Correlation,Correlation,Info Ratio,Info Ratio,Info Ratio,Info Ratio,Max DD (%),Max DD (%),Max DD (%),Max DD (%)
+,mean,std,min,max,mean,std,min,max,mean,std,min,max,mean,std,min,max,mean,std,min,max
+Strategy,,,,,,,,,,,,,,,,,,,,
+Clone,10.1835,2.2241220115412337,6.707,12.935,0.67713,0.12790383583857923,0.4882,0.9069,0.77491,0.07875481572577009,0.6717,0.905,-0.35764999999999997,0.7294687492354359,-1.5929,0.4915,-13.389,9.456174291023945,-37.78,-6.69
+SP_mirror,9.0379,2.186139593489451,6.168,12.143,0.8645099999999999,0.114326787470537,0.7141,1.0601,0.84533,0.05102415658838032,0.7751,0.9269,-0.23501,0.6773059220995422,-1.0431,0.7135,-15.918000000000001,9.887314880975298,-39.49,-7.87

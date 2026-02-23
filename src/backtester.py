@@ -105,7 +105,7 @@ def compare_benchmarks(results_dict, spy_returns):
     Parameters
     ----------
     results_dict : dict[str, pd.Series]
-        Strategy name → daily returns.
+        Strategy name -> daily returns.
     spy_returns : pd.Series
         SPY daily returns.
 
