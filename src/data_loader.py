@@ -69,7 +69,7 @@ def load_stock_history(filepath=None):
 
     print(f"[data_loader] Loaded stock history: {len(dates)} trading days, "
           f"{prices.shape[1]} tickers, {len(all_fields)} fields")
-    print(f"[data_loader] Date range: {dates.min().date()} → {dates.max().date()}")
+    print(f"[data_loader] Date range: {dates.min().date()} to {dates.max().date()}")
 
     return prices, all_fields
 
@@ -112,8 +112,8 @@ def load_economic_indicators(filepath=None):
     econ = pd.read_csv(filepath, parse_dates=["date"], index_col="date")
     econ.sort_index(inplace=True)
 
-    # Forward-fill missing values (weekends/holidays in macro data)
-    econ = econ.ffill()
+    # Forward-fill then back-fill missing values (covers leading NaNs in IG/HY spreads)
+    econ = econ.ffill().bfill()
 
     # Report gaps
     missing = econ.isna().sum()
@@ -122,7 +122,7 @@ def load_economic_indicators(filepath=None):
 
     print(f"[data_loader] Loaded economic indicators: {len(econ)} rows, "
           f"{econ.shape[1]} columns")
-    print(f"[data_loader] Date range: {econ.index.min().date()} → {econ.index.max().date()}")
+    print(f"[data_loader] Date range: {econ.index.min().date()} to {econ.index.max().date()}")
 
     return econ
 

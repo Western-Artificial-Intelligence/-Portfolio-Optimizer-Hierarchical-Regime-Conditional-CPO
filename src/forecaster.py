@@ -14,7 +14,7 @@ import numpy as np
 
 
 def compute_uncertainty_features(returns, benchmark_col="SPY US Equity",
-                                  windows=(5, 21, 63)):
+                                  windows=(5, 21, 63), verbose=True):
     """
     Compute uncertainty/risk features from return series.
 
@@ -60,9 +60,9 @@ def compute_uncertainty_features(returns, benchmark_col="SPY US Equity",
         features["spy_vol_63d"] = spy.rolling(63).std() * np.sqrt(252)
 
         # Relative vol: Canadian vs SPY (>1 means Canadians more volatile)
-        features["relative_vol"] = (
-            mean_ret.rolling(21).std() / spy.rolling(21).std()
-        )
+        # Add epsilon to avoid inf when SPY vol is near zero (e.g. synthetic paths)
+        spy_vol = spy.rolling(21).std().clip(lower=1e-10)
+        features["relative_vol"] = mean_ret.rolling(21).std() / spy_vol
 
     # --- Downside risk ---
     neg_returns = mean_ret.clip(upper=0)
@@ -71,11 +71,12 @@ def compute_uncertainty_features(returns, benchmark_col="SPY US Equity",
     # --- Max drawdown over rolling window ---
     cum = (1 + mean_ret).cumprod()
     for w in [21, 63]:
-        rolling_max = cum.rolling(w).max()
+        rolling_max = cum.rolling(w).max().clip(lower=1e-10)
         rolling_dd = (cum - rolling_max) / rolling_max
         features[f"rolling_dd_{w}d"] = rolling_dd
 
     result = pd.DataFrame(features, index=returns.index)
-    print(f"[forecaster] Computed {result.shape[1]} uncertainty features")
+    if verbose:
+        print(f"[forecaster] Computed {result.shape[1]} uncertainty features")
 
     return result
