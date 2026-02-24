@@ -53,6 +53,20 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
             X_test[col] = pd.to_numeric(X_test[col], errors="coerce")
 
     # Compute SHAP values
+    # Fix for XGBoost ≥ 2.1 + SHAP 0.46: base_score format changed.
+    # Monkey-patch the booster so SHAP can parse it.
+    try:
+        booster = model.get_booster()
+        import json as _json
+        cfg = _json.loads(booster.save_config())
+        bs_raw = cfg["learner"]["learner_model_param"]["base_score"]
+        if isinstance(bs_raw, str) and bs_raw.startswith("["):
+            clean_bs = str(float(bs_raw.strip("[]")))
+            cfg["learner"]["learner_model_param"]["base_score"] = clean_bs
+            booster.load_config(_json.dumps(cfg))
+    except Exception:
+        pass
+
     try:
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)

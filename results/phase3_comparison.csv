@@ -1,0 +1,4 @@
+Name,Ann Return (%),Ann Vol (%),Sharpe,Sortino,Max DD (%),Calmar,Skewness,Kurtosis,Tracking Error (%),Corr w/ SPY
+Clone + AI Supervisor,12.68,18.3,0.584,0.663,-37.51,0.338,-0.922,28.851,10.97,0.846
+Clone (unsupervised),13.26,18.76,0.6,0.691,-37.78,0.351,-0.862,26.942,10.96,0.847
+SPY Buy & Hold,14.32,20.48,0.602,0.732,-34.1,0.42,-0.269,13.367,0.0,1.0
