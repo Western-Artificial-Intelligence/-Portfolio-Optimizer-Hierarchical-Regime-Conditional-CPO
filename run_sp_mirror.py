@@ -271,7 +271,7 @@ def plot_semiannual_betas(
 
     beta_df = pd.DataFrame(beta_series)
     # Group into 6-month buckets and take the mean
-    half_year = beta_df.groupby(pd.Grouper(freq="6ME")).mean()
+    half_year = beta_df.groupby(pd.Grouper(freq="6M")).mean()
     half_year = half_year.dropna(how="all")
 
     # Add SPY as constant 1.0

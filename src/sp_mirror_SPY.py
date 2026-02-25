@@ -1,7 +1,7 @@
 """
 SP_mirror_SPY: derivative-overlay extension targeting SPY (S&P 500 price index)
 instead of SPY_Total_Returns (total return). Reuses all infrastructure from
-sp_mirror_SPY_Total_Returns.
+sp_mirror_SPY_Total_Returns (compatible with pandas>=2.0,<2.2 per requirements).
 
 How to run:
   From project root: python run_sp_mirror.py

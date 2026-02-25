@@ -5,6 +5,8 @@ How to run:
   From project root: python run_sp_mirror.py
   Or: python -c "from src.sp_mirror_SPY_Total_Returns import *; ..."
 
+Compatibility: rebal_freq "M" | "W" | "D" (no pandas offset parsing); works with pandas>=2.0,<2.2.
+
 Assumptions and limitations (documented in code):
 - No futures margin/funding rates; ES1 daily returns used as overlay stream.
 - No explicit roll yield; Bloomberg generic continuous ES1 is used as-is.
