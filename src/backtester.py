@@ -27,6 +27,9 @@ def compute_metrics(returns, name="Portfolio", risk_free_rate=0.02):
     metrics : dict
     """
     returns = returns.dropna()
+    if len(returns) < 2:
+        return {"Name": name, "Sharpe": 0, "Max Drawdown": np.nan, "Ann Return (%)": 0,
+                "Ann Vol (%)": 0, "Sortino": 0, "Calmar": 0, "Skewness": 0, "Kurtosis": 0}
 
     ann_return = returns.mean() * 252
     ann_vol = returns.std() * np.sqrt(252)
@@ -51,6 +54,12 @@ def compute_metrics(returns, name="Portfolio", risk_free_rate=0.02):
 
     # Tracking error will be computed separately when comparing
 
+    try:
+        skew_val = returns.skew()
+        kurt_val = returns.kurtosis()
+    except (ValueError, ZeroDivisionError):
+        skew_val = kurt_val = 0
+
     metrics = {
         "Name": name,
         "Ann Return (%)": round(ann_return * 100, 2),
@@ -59,8 +68,8 @@ def compute_metrics(returns, name="Portfolio", risk_free_rate=0.02):
         "Sortino": round(sortino, 3),
         "Max DD (%)": round(max_dd * 100, 2),
         "Calmar": round(calmar, 3),
-        "Skewness": round(returns.skew(), 3),
-        "Kurtosis": round(returns.kurtosis(), 3),
+        "Skewness": round(skew_val, 3),
+        "Kurtosis": round(kurt_val, 3),
     }
 
     return metrics

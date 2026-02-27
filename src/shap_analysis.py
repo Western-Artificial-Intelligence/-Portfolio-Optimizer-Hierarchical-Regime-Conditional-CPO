@@ -46,22 +46,28 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
     print("SHAP ANALYSIS — Feature Importance")
     print("=" * 60)
 
+    # Ensure numeric types (SHAP fails on object/string columns)
+    X_test = X_test.copy()
+    for col in X_test.columns:
+        if X_test[col].dtype in (object, "object", "string"):
+            X_test[col] = pd.to_numeric(X_test[col], errors="coerce")
+
     # Compute SHAP values
-    # Fix for XGBoost ≥ 2.1 + SHAP compatibility: base_score format changed
+    # Fix for XGBoost >= 2.1 + SHAP compatibility: base_score format changed
     # from float to bracketed string like '[8.788133E-1]'.
     # Patch Python's built-in float to handle the bracketed format.
-    
+
     import builtins
     _original_float = builtins.float
-    
+
     def _patched_float(x):
         if isinstance(x, str) and x.startswith("[") and x.endswith("]"):
             x = x.strip("[]")
         return _original_float(x)
-    
+
     builtins.float = _patched_float
     print("[shap] Applied base_score compatibility patch")
-    
+
     try:
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)

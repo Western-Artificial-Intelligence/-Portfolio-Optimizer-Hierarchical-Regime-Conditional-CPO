@@ -83,7 +83,7 @@ def optimize_tracking(returns_canadian, returns_spy, max_weight=MAX_WEIGHT):
 
 
 def rolling_optimization(prices, benchmark_col=BENCHMARK,
-                          lookback=252 * 5, rebal_freq="M",
+                          lookback=252 * 5, rebal_freq="ME",
                           max_weight=MAX_WEIGHT):
     """
     Walk-forward monthly rebalancing using QP optimization.
@@ -97,7 +97,7 @@ def rolling_optimization(prices, benchmark_col=BENCHMARK,
     lookback : int
         Number of trading days to look back for each optimization.
     rebal_freq : str
-        Rebalancing frequency ('M' for monthly, 'Q' for quarterly).
+        Rebalancing frequency ('ME' for month-end, 'QE' for quarter-end).
 
     Returns
     -------

@@ -113,8 +113,8 @@ def load_economic_indicators(filepath=None):
     econ.sort_index(inplace=True)
     assert isinstance(econ.index, pd.DatetimeIndex), "Economic indicators must have DatetimeIndex for super-state alignment."
 
-    # Forward-fill missing values (weekends/holidays in macro data)
-    econ = econ.ffill()
+    # Forward-fill then back-fill missing values (covers leading NaNs in IG/HY spreads)
+    econ = econ.ffill().bfill()
 
     # Report gaps
     missing = econ.isna().sum()

@@ -1,18 +1,23 @@
 """
-Portfolio Optimizer – Pipeline Runner
+Portfolio Optimizer - Pipeline Runner
 
-Phase 1: Load → Clean → Feature Engineer → EDA
-Phase 2: QP Solver → Backtest → Evaluate
-Phase 3: AI Supervisor → Meta-Labeling → Regime-Aware Allocation
-Phase 4: SHAP Analysis → Feature Importance
-Phase 5: Ablation Study → Feature Group Validation
-Phase 6: Synthetic Validation → Robustness Testing (Optional, slow)
+Phase 1: Load -> Clean -> Feature Engineer -> EDA
+Phase 2: QP Solver -> Backtest -> Evaluate
+Phase 3: AI Supervisor -> Meta-Labeling -> Regime-Aware Allocation
+Phase 4: SHAP Analysis -> Feature Importance
+Phase 5: Ablation Study -> Feature Group Validation
+Phase 6: Synthetic Validation -> Robustness Testing (Optional, slow)
 
 Run with:  python main.py
 """
 
 import sys
 import os
+import io
+
+# Fix Unicode output on Windows (cp1252 can't encode arrows, emojis, etc.)
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -83,7 +88,7 @@ def phase2(prices_clean):
         prices_clean,
         benchmark_col=BENCHMARK,
         lookback=252 * 5,
-        rebal_freq="M",
+        rebal_freq="ME",
     )
 
     # Get SPY returns for comparison
@@ -207,7 +212,10 @@ def phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100):
         returns, econ, yield_curve,
         n_paths=n_paths,
         benchmark_col=BENCHMARK,
-        train_end="2019-12-31",
+        train_frac=0.6,
+        min_train=15,
+        min_test=3,
+        min_successful=50,
     )
     if len(results) > 0:
         plot_synthetic_validation(results, save_dir=RESULTS_DIR)
@@ -241,10 +249,10 @@ def main():
     )
 
     # Phase 6: Synthetic Validation (optional — slow)
-    # Uncomment to run (takes ~30-60 min with n_paths=1000)
-    # synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100)
+    # n_paths=50 ~5 min; n_paths=1000 ~30-60 min
+    synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=50)
 
-    print("\n[OK] All phases complete! Check results/ for outputs.")
+    print("\nAll phases complete! Check results/ for outputs.")
 
 
 if __name__ == "__main__":
