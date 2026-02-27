@@ -68,8 +68,8 @@ def _train_and_evaluate(X_train, y_train, X_test, clone_returns_test):
 
         return {
             "sharpe": metrics.get("Sharpe", np.nan),
-            "max_drawdown": metrics.get("Max Drawdown", np.nan),
-            "ann_return": metrics.get("Annual Return", np.nan),
+            "max_drawdown": metrics.get("Max DD (%)", np.nan),
+            "ann_return": metrics.get("Ann Return (%)", np.nan),
         }
     except Exception:
         return {"sharpe": np.nan, "max_drawdown": np.nan, "ann_return": np.nan}

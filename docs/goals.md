@@ -3,6 +3,7 @@
 > **Project:** Hierarchical Regime-Conditional Portfolio Optimization (CPO)
 > **Paper:** `docs/paper.tex`
 > **Conference:** CUCAI 2026
+> **Last Updated:** February 27, 2026 — 3:30 AM EST
 
 ---
 
@@ -14,6 +15,7 @@
 | `stock_profiles.csv/json` | Static profiles (GICS sector, beta, analyst rating, currency) |
 | `economic_indicators.csv/json` | Macro indicators (VIX, yield curves, credit spreads, DXY, MOVE, etc.) |
 | `yield_curve_spread.csv/json` | 10Y-2Y yield curve spread time series |
+| `data/derivatives/*.csv` | Bloomberg BDH CSVs: ES1 futures, USDCAD, SPXT, SPX, VIX, MOVE, DXY, sector indices |
 
 ---
 
@@ -53,10 +55,38 @@
 - [x] Tune with `TimeSeriesSplit` cross-validation
 - [x] Output continuous confidence score `P ∈ [0, 1]`
 
-### 3d. Execution Logic
-- [ ] **Update to continuous blending**: `W_final = P × W_aggressive + (1-P) × W_defensive`
-- [ ] Define defensive allocation (min-volatility or cash)
-- [ ] Remove old step-function logic (bull/bear thresholds)
+### 3d. Execution Logic ✅
+- [x] **Update to continuous blending**: `W_final = P × W_aggressive + (1-P) × W_defensive`
+- [x] Define defensive allocation (min-volatility or cash)
+- [x] Remove old step-function logic (bull/bear thresholds)
+
+### 3e. Super-State Bug Fix (see `docs/superstate_fix_roadmap.md`)
+- [ ] Chunk 1: Add diagnostics (log index metadata, overlap counts, NaN counts)
+- [ ] Chunk 2: Normalize indices to canonical form (fix tz/type mismatches)
+- [x] Chunk 3: Make `dropna()` less aggressive
+- [x] Chunk 4: Align uncertainty to clone dates explicitly
+- [x] Chunk 5: Data loading and Phase 1/2 consistency
+- [x] Chunk 6: Tests and regression guard
+
+---
+
+## Phase 3.5: SP_Mirror — Derivative Overlay System ✅
+
+> Added via `SP_Clone_Derivatives` PR (merged Feb 2026). See `docs/SP_Mirror.md` and `docs/SP_Mirror_Robustness.md`.
+
+- [x] Implement Layer 2 derivative overlay engine (`src/sp_mirror_SPY_Total_Returns.py`)
+- [x] ES1 S&P 500 futures overlay with calibrated alpha scaling
+- [x] Spot USDCAD FX hedge for overlay USD exposure
+- [x] 4 overlay modes: beta, vol, hybrid, regime-conditional
+- [x] Regime-conditional mode with 3 fixed alphas by volatility regime (recommended)
+- [x] Drawdown circuit-breaker (-15% DD → overlay off)
+- [x] Vol-regime dampening for non-regime modes
+- [x] SPY convenience wrapper (`src/sp_mirror_SPY.py`)
+- [x] Single entrypoint runner (`run_sp_mirror.py`) — runs both SPY_Total_Returns + SPY benchmarks
+- [x] 8-section robustness audit framework (`run_sp_mirror_robustness.py`)
+- [x] Walk-forward testing, parameter sensitivity, placebo test, crisis stress test
+- [x] Composite robustness score: **1/10 (LOW overfitting risk)**
+- [x] Bloomberg derivatives data loader
 
 ---
 
@@ -74,6 +104,7 @@
 
 ## Phase 5: Feature Importance & Interpretability (SHAP)
 
+- [x] Fix SHAP 0.46 + XGBoost 3.2 `base_score` compatibility bug (patched in `src/shap_analysis.py`)
 - [ ] Generate SHAP beeswarm plot for XGBoost — rank feature importance
 - [ ] Generate SHAP dependence plots (e.g., VIX > 25 disproportionate impact)
 - [ ] Ablation study: Sharpe ratio when removing each feature group:
@@ -113,6 +144,9 @@
 
 - [x] Set up project structure (`src/`, `docs/`, `data/`, `results/`)
 - [x] Create `requirements.txt` with dependencies
-- [ ] Write `architecture.md` documenting system design
+- [x] Write `architecture.md` documenting system design
+- [x] Write SP_Mirror documentation (`SP_Mirror.md`, `SP_Mirror_Robustness.md`, `sp_mirror_README.md`)
+- [x] Write `results_analysis.md` — full first-run analysis with interpretations
+- [x] Write `superstate_fix_roadmap.md` — chunked bug fix plan
 - [ ] Write proper `README.md` with setup instructions
 - [ ] Ensure `.env` and data files are in `.gitignore`

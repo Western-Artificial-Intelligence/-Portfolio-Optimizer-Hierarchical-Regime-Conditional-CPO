@@ -246,10 +246,13 @@ def train_classifier(X, y, n_splits=5, verbose=True):
         print(f"\n[supervisor] Training XGBoost on {len(X_aligned)} samples, "
               f"{X_aligned.shape[1]} features")
 
-    # Class imbalance handling — upweight the minority class (danger)
+    # Class imbalance handling — upweight the minority class (danger = 0)
+    # XGBoost's scale_pos_weight multiplies gradient of POSITIVE class (1).
+    # Since class 1 (safe) is the majority (~87.5%), we set scale_pos_weight < 1
+    # to reduce its weight, effectively upweighting the minority danger class.
     n_pos = int((y_aligned == 1).sum())
     n_neg = int((y_aligned == 0).sum())
-    scale_pos_weight = n_pos / n_neg if n_neg > 0 else 1.0
+    scale_pos_weight = n_neg / n_pos if n_pos > 0 else 1.0
     if verbose:
         print(f"[supervisor] Class balance: {n_pos} safe / {n_neg} danger "
               f"(scale_pos_weight={scale_pos_weight:.2f})")
@@ -336,7 +339,8 @@ def train_classifier(X, y, n_splits=5, verbose=True):
 # 4. Execution Logic — Continuous Blending
 # ──────────────────────────────────────────────
 
-def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0):
+def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0,
+                     transaction_cost_bps=None):
     """
     Apply continuous blending based on the Supervisor's confidence score.
 
@@ -347,8 +351,8 @@ def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0):
 
     where aggressive = Worker's clone returns, defensive = cash.
 
-    This produces smooth allocation transitions, proportional hedging,
-    and reduced turnover compared to step-function approaches.
+    Transaction costs are applied proportionally when exposure changes:
+        cost[t] = |P[t] - P[t-1]| × TRANSACTION_COST_BPS / 10000
 
     Parameters
     ----------
@@ -358,22 +362,36 @@ def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0):
         P ∈ [0, 1] from the XGBoost classifier, indexed by date.
     cash_return : float
         Daily return on defensive allocation (default: 0.0 = cash).
+    transaction_cost_bps : float, optional
+        Cost in basis points per unit of exposure change.
+        If None, uses TRANSACTION_COST_BPS from config.py.
 
     Returns
     -------
     supervised_returns : pd.Series
-        Blended daily returns.
+        Blended daily returns (net of transaction costs).
     regime_labels : pd.Series
         "aggressive", "moderate", or "defensive" for reporting.
     allocation : pd.Series
         The blending coefficient P used each day.
     """
+    from src.config import TRANSACTION_COST_BPS
+
+    if transaction_cost_bps is None:
+        transaction_cost_bps = TRANSACTION_COST_BPS
+
     common = clone_returns.index.intersection(confidence_scores.index)
     clone = clone_returns.loc[common]
     P = confidence_scores.loc[common].clip(0.0, 1.0)
 
     # ── Continuous blending: W_final = P × W_agg + (1-P) × W_def ──
-    supervised_returns = P * clone + (1 - P) * cash_return
+    gross_returns = P * clone + (1 - P) * cash_return
+
+    # ── Transaction costs: proportional to exposure change ──
+    delta_P = P.diff().abs().fillna(0.0)
+    cost_per_day = delta_P * (transaction_cost_bps / 10000.0)
+    supervised_returns = gross_returns - cost_per_day
+    total_cost_bps = cost_per_day.sum() * 10000
 
     # Regime labels (for reporting / visualization only)
     regime = pd.Series("moderate", index=common)
@@ -390,6 +408,8 @@ def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0):
     print(f"  [Aggressive] (P>0.7): {agg_pct:.1f}%")
     print(f"  [Moderate]  (0.3-0.7): {mod_pct:.1f}%")
     print(f"  [Defensive] (P<0.3):  {def_pct:.1f}%")
+    print(f"  Transaction costs:    {total_cost_bps:.1f} bps total "
+          f"({transaction_cost_bps} bps per unit exposure change)")
 
     return supervised_returns, regime, P
 

@@ -164,11 +164,11 @@ def _run_pipeline_on_path(synthetic_returns, econ, yield_curve,
 
         return {
             "cpo_sharpe": cpo_metrics.get("Sharpe", np.nan),
-            "cpo_maxdd": cpo_metrics.get("Max Drawdown", np.nan),
+            "cpo_maxdd": cpo_metrics.get("Max DD (%)", np.nan),
             "worker_sharpe": worker_metrics.get("Sharpe", np.nan),
-            "worker_maxdd": worker_metrics.get("Max Drawdown", np.nan),
+            "worker_maxdd": worker_metrics.get("Max DD (%)", np.nan),
             "benchmark_sharpe": benchmark_metrics.get("Sharpe", np.nan),
-            "benchmark_maxdd": benchmark_metrics.get("Max Drawdown", np.nan),
+            "benchmark_maxdd": benchmark_metrics.get("Max DD (%)", np.nan),
         }
 
     except Exception as e:
@@ -229,11 +229,11 @@ def _run_pipeline_on_path_debug(synthetic_returns, econ, yield_curve,
 
     return {
         "cpo_sharpe": cpo_metrics.get("Sharpe", np.nan),
-        "cpo_maxdd": cpo_metrics.get("Max Drawdown", np.nan),
+        "cpo_maxdd": cpo_metrics.get("Max DD (%)", np.nan),
         "worker_sharpe": worker_metrics.get("Sharpe", np.nan),
-        "worker_maxdd": worker_metrics.get("Max Drawdown", np.nan),
+        "worker_maxdd": worker_metrics.get("Max DD (%)", np.nan),
         "benchmark_sharpe": benchmark_metrics.get("Sharpe", np.nan),
-        "benchmark_maxdd": benchmark_metrics.get("Max Drawdown", np.nan),
+        "benchmark_maxdd": benchmark_metrics.get("Max DD (%)", np.nan),
     }
 
 

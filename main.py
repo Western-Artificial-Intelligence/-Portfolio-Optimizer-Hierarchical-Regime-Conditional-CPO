@@ -250,7 +250,7 @@ def main():
 
     # Phase 6: Synthetic Validation (optional — slow)
     # n_paths=50 ~5 min; n_paths=1000 ~30-60 min
-    synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=50)
+    synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=1000)
 
     print("\nAll phases complete! Check results/ for outputs.")
 

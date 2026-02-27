@@ -377,19 +377,19 @@ def plot_supervisor_decisions(confidence, clone_returns, regime):
     ax = axes[0]
     ax.plot(confidence.index, confidence.values, color="#2c3e50",
             linewidth=0.8, alpha=0.8)
-    ax.axhline(0.6, color="#27ae60", linestyle="--", alpha=0.5, label="Bull threshold")
-    ax.axhline(0.4, color="#e74c3c", linestyle="--", alpha=0.5, label="Bear threshold")
+    ax.axhline(0.7, color="#27ae60", linestyle="--", alpha=0.5, label="Aggressive threshold")
+    ax.axhline(0.3, color="#e74c3c", linestyle="--", alpha=0.5, label="Defensive threshold")
 
     # Shade regimes
     if regime is not None:
         common = confidence.index.intersection(regime.index)
         r = regime.loc[common]
-        bull_mask = r == "bull"
-        bear_mask = r == "bear"
+        agg_mask = r == "aggressive"
+        def_mask = r == "defensive"
 
-        for idx in common[bull_mask]:
+        for idx in common[agg_mask]:
             ax.axvspan(idx, idx + pd.Timedelta(days=1), alpha=0.05, color="green")
-        for idx in common[bear_mask]:
+        for idx in common[def_mask]:
             ax.axvspan(idx, idx + pd.Timedelta(days=1), alpha=0.05, color="red")
 
     ax.set_title("AI Supervisor — Confidence Score & Regime Detection",
