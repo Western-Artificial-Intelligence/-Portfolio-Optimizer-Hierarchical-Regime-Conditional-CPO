@@ -79,6 +79,16 @@ def generate_meta_labels(clone_returns, threshold=0.02, horizon=5, verbose=True)
 # 2. Super-State Feature Engineering
 # ──────────────────────────────────────────────
 
+def _log_index_diagnostics(name, index):
+    """Chunk 1: Log index metadata for diagnostics."""
+    if index is None or len(index) == 0:
+        print(f"[supervisor] {name}: empty")
+        return
+    d = index.dtype
+    tz = getattr(index, "tz", None)
+    print(f"[supervisor] {name}: len={len(index)}, min={index.min()}, max={index.max()}, dtype={d}, tz={tz}")
+
+
 def build_super_state(clone_returns, returns_all, econ, yield_curve, verbose=True):
     """
     Build the complete super-state feature matrix.
@@ -89,41 +99,78 @@ def build_super_state(clone_returns, returns_all, econ, yield_curve, verbose=Tru
     - Yield curve features (spread, inversion flag)
     - Clone momentum signals
 
+    Expects clone_returns, returns_all, econ, and yield_curve to have
+    overlapping DatetimeIndex date ranges; indices are normalized to a
+    common canonical index for alignment.
+
     Returns
     -------
     X : pd.DataFrame
         Feature matrix indexed by date.
     """
+    # ── Chunk 1: Diagnostics ──
+    _log_index_diagnostics("clone_returns.index", clone_returns.index)
+    _log_index_diagnostics("returns_all.index", returns_all.index)
+    _log_index_diagnostics("econ.index", econ.index)
+    _log_index_diagnostics("yield_curve.index", yield_curve.index)
+
+    # ── Chunk 2: Canonical index (normalize to datetime64[ns], no tz) ──
+    canonical_index = pd.DatetimeIndex(clone_returns.index).normalize()
+    if canonical_index.tz is not None:
+        canonical_index = canonical_index.tz_localize(None)
+
+    # Overlap counts (Chunk 1)
+    overlap_returns = canonical_index.intersection(returns_all.index).size
+    overlap_econ = canonical_index.intersection(econ.index).size
+    overlap_yc = canonical_index.intersection(yield_curve.index).size
+    print(f"[supervisor] Overlap with canonical: returns_all={overlap_returns}, econ={overlap_econ}, yield_curve={overlap_yc}")
+
     features = {}
 
-    # ── Uncertainty features ──
+    # ── Uncertainty: compute then align to canonical (Chunk 2 + Chunk 4) ──
     uncertainty = compute_uncertainty_features(returns_all, verbose=verbose)
+    uncertainty = uncertainty.reindex(canonical_index, method="ffill")
+    # Chunk 4: safeguard — warn if uncertainty is all-NaN (index alignment issue)
+    if uncertainty.isna().all(axis=1).all():
+        print("[supervisor] WARNING: Uncertainty is all-NaN after reindex; index alignment may be wrong.")
+    elif uncertainty.isna().all(axis=1).mean() > 0.5:
+        print(f"[supervisor] WARNING: {(uncertainty.isna().all(axis=1).mean()*100):.0f}% of rows have all-NaN uncertainty.")
     for col in uncertainty.columns:
         features[col] = uncertainty[col]
 
-    # ── Macro indicators ──
-    econ_aligned = econ.reindex(clone_returns.index, method="ffill").bfill()
+    # ── Macro: align econ to canonical (Chunk 2) ──
+    econ_idx = pd.DatetimeIndex(econ.index).normalize()
+    if econ_idx.tz is not None:
+        econ_idx = econ_idx.tz_localize(None)
+    econ_norm = econ.set_axis(econ_idx, axis=0)
+    econ_aligned = econ_norm.reindex(canonical_index, method="ffill").bfill()
     for col in econ_aligned.columns:
-        # Raw level
         features[f"macro_{col}"] = econ_aligned[col]
-        # Rate of change (1-week, 1-month)
         features[f"macro_{col}_chg_5d"] = econ_aligned[col].pct_change(5)
         features[f"macro_{col}_chg_21d"] = econ_aligned[col].pct_change(21)
 
-    # ── Yield curve ──
-    yc_aligned = yield_curve.reindex(clone_returns.index, method="ffill").bfill()
+    # ── Yield curve: align to canonical (Chunk 2) ──
+    yc_idx = pd.DatetimeIndex(yield_curve.index).normalize()
+    if yc_idx.tz is not None:
+        yc_idx = yc_idx.tz_localize(None)
+    yc_norm = yield_curve.set_axis(yc_idx, axis=0)
+    yc_aligned = yc_norm.reindex(canonical_index, method="ffill").bfill()
     if "YIELD_CURVE_SPREAD" in yc_aligned.columns:
         features["yc_spread"] = yc_aligned["YIELD_CURVE_SPREAD"]
         features["yc_spread_chg_5d"] = yc_aligned["YIELD_CURVE_SPREAD"].pct_change(5)
     if "INVERTED" in yc_aligned.columns:
         features["yc_inverted"] = yc_aligned["INVERTED"]
 
-    # ── Clone-specific momentum signals ──
-    features["clone_ret_5d"] = clone_returns.rolling(5).sum()
-    features["clone_ret_21d"] = clone_returns.rolling(21).sum()
-    features["clone_ret_63d"] = clone_returns.rolling(63).sum()
+    # ── Clone momentum: align clone to canonical index (Chunk 2) ──
+    cr_idx = pd.DatetimeIndex(clone_returns.index).normalize()
+    if cr_idx.tz is not None:
+        cr_idx = cr_idx.tz_localize(None)
+    clone_on_canonical = clone_returns.set_axis(cr_idx, axis=0).reindex(canonical_index)
+    features["clone_ret_5d"] = clone_on_canonical.rolling(5).sum()
+    features["clone_ret_21d"] = clone_on_canonical.rolling(21).sum()
+    features["clone_ret_63d"] = clone_on_canonical.rolling(63).sum()
 
-    X = pd.DataFrame(features, index=clone_returns.index)
+    X = pd.DataFrame(features, index=canonical_index)
 
     # Replace inf with NaN (e.g. from relative_vol when vol near zero)
     X = X.replace([np.inf, -np.inf], np.nan)
@@ -135,8 +182,22 @@ def build_super_state(clone_returns, returns_all, econ, yield_curve, verbose=Tru
         if verbose:
             print(f"[supervisor] Dropped {len(all_nan_cols)} all-NaN columns: {all_nan_cols}")
 
-    # Drop early rows with NaN from rolling calculations
-    X = X.dropna()
+    # Chunk 1: post-build diagnostics
+    nan_per_col = X.isna().sum()
+    if (nan_per_col > 0).any():
+        print(f"[supervisor] NaN counts (top columns): {nan_per_col.nlargest(10).to_dict()}")
+    print(f"[supervisor] Before dropna: rows={len(X)}, after dropna: rows={len(X.dropna())}")
+
+    # Chunk 3: Drop only rows that are NaN in critical columns (not every column)
+    CRITICAL_COLS = ["clone_ret_5d", "vol_5d", "yc_spread"]
+    critical_cols = [c for c in CRITICAL_COLS if c in X.columns]
+    if not critical_cols:
+        critical_cols = list(X.columns[:3])  # fallback: first 3 columns
+    mask = X[critical_cols].notna().all(axis=1)
+    X = X.loc[mask]
+    dropped = (~mask).sum()
+    if dropped > 0:
+        print(f"[supervisor] Dropped {dropped} rows with NaN in critical columns {critical_cols}")
 
     if verbose:
         print(f"[supervisor] Super-state features: {X.shape[1]} columns, "
@@ -173,6 +234,13 @@ def train_classifier(X, y, n_splits=5, verbose=True):
     common = X.index.intersection(y.index)
     X_aligned = X.loc[common]
     y_aligned = y.loc[common]
+
+    if len(X_aligned) == 0:
+        raise ValueError(
+            "Training set has 0 samples after aligning X and y. "
+            "Check that your data has dates on or before train_end (e.g. 2019-12-31). "
+            "If clone_returns, econ, or yield_curve only span 2020+, either use earlier data or set train_end later."
+        )
 
     if verbose:
         print(f"\n[supervisor] Training XGBoost on {len(X_aligned)} samples, "
@@ -244,7 +312,7 @@ def train_classifier(X, y, n_splits=5, verbose=True):
         for metric, values in cv_metrics.items():
             mean_val = np.mean(values)
             std_val = np.std(values)
-            print(f"  {metric:>10s}: {mean_val:.4f} ± {std_val:.4f}")
+            print(f"  {metric:>10s}: {mean_val:.4f} +/- {std_val:.4f}")
 
     # Final model: train on all data
     final_model = XGBClassifier(
@@ -333,7 +401,7 @@ def apply_supervisor(clone_returns, confidence_scores, cash_return=0.0):
 def run_supervisor_pipeline(clone_returns, returns_all, econ, yield_curve,
                              train_end="2019-12-31"):
     """
-    Full Phase 3 pipeline: features → labels → train → predict → apply.
+    Full Phase 3 pipeline: features -> labels -> train -> predict -> apply.
 
     Uses walk-forward: train on data up to train_end, predict on test period.
 
@@ -372,18 +440,41 @@ def run_supervisor_pipeline(clone_returns, returns_all, econ, yield_curve,
     X = X.loc[common]
     y = labels.loc[common]
 
-    train_mask = X.index <= train_end
-    test_mask = X.index > train_end
+    # Ensure train_end is comparable to index (e.g. Timestamp vs DatetimeIndex)
+    train_end_ts = pd.Timestamp(train_end)
+    if X.index.tz is not None and train_end_ts.tz is None:
+        train_end_ts = train_end_ts.tz_localize(X.index.tz)
+
+    train_mask = X.index <= train_end_ts
+    test_mask = X.index > train_end_ts
 
     X_train, y_train = X.loc[train_mask], y.loc[train_mask]
     X_test, y_test = X.loc[test_mask], y.loc[test_mask]
 
-    print(f"\n[supervisor] Train: {len(X_train)} samples ({X_train.index.min().date()} → {X_train.index.max().date()})")
-    print(f"[supervisor] Test:  {len(X_test)} samples ({X_test.index.min().date()} → {X_test.index.max().date()})")
+    # If no training samples (e.g. data starts after train_end), use 75% of data for train
+    if len(X_train) == 0:
+        data_start = X.index.min()
+        data_end = X.index.max()
+        n = len(X)
+        if n < 2:
+            raise ValueError(
+                f"Need at least 2 aligned samples to split into train/test. Got {n}. "
+                "Check data range and alignment of features vs labels."
+            )
+        # 75% train / 25% test, with at least 1 sample in each
+        split_idx = max(1, min(n * 75 // 100, n - 1))
+        train_end_ts = X.index[split_idx - 1]
+        train_mask = X.index <= train_end_ts
+        test_mask = X.index > train_end_ts
+        X_train, y_train = X.loc[train_mask], y.loc[train_mask]
+        X_test, y_test = X.loc[test_mask], y.loc[test_mask]
+        print(
+            f"[supervisor] Data range {getattr(data_start, 'date', data_start)}-{getattr(data_end, 'date', data_end)} "
+            f"has no dates <= {train_end!r}. Using 75% train / 25% test; train_end={getattr(train_end_ts, 'date', train_end_ts)}."
+        )
 
-    print(f"X_train date range: {X_train.index.min()} → {X_train.index.max()}, n={len(X_train)}")
-    print(f"y_train date range: {y_train.index.min()} → {y_train.index.max()}, n={len(y_train)}")
-    print(f"Intersection: {len(X_train.index.intersection(y_train.index))}")
+    print(f"\n[supervisor] Train: {len(X_train)} samples ({X_train.index.min().date()} to {X_train.index.max().date()})")
+    print(f"[supervisor] Test:  {len(X_test)} samples ({X_test.index.min().date()} to {X_test.index.max().date()})")
 
     # Step 4: Train on training data only
     model, cv_results = train_classifier(X_train, y_train)

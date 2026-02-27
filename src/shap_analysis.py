@@ -53,30 +53,27 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
             X_test[col] = pd.to_numeric(X_test[col], errors="coerce")
 
     # Compute SHAP values
-    # Fix for XGBoost ≥ 2.1 + SHAP 0.46: base_score format changed.
-    # Monkey-patch the booster so SHAP can parse it.
-    try:
-        booster = model.get_booster()
-        import json as _json
-        cfg = _json.loads(booster.save_config())
-        bs_raw = cfg["learner"]["learner_model_param"]["base_score"]
-        if isinstance(bs_raw, str) and bs_raw.startswith("["):
-            clean_bs = str(float(bs_raw.strip("[]")))
-            cfg["learner"]["learner_model_param"]["base_score"] = clean_bs
-            booster.load_config(_json.dumps(cfg))
-    except Exception:
-        pass
+    # Fix for XGBoost >= 2.1 + SHAP compatibility: base_score format changed
+    # from float to bracketed string like '[8.788133E-1]'.
+    # Patch Python's built-in float to handle the bracketed format.
+
+    import builtins
+    _original_float = builtins.float
+
+    def _patched_float(x):
+        if isinstance(x, str) and x.startswith("[") and x.endswith("]"):
+            x = x.strip("[]")
+        return _original_float(x)
+
+    builtins.float = _patched_float
+    print("[shap] Applied base_score compatibility patch")
 
     try:
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)
-    except (ValueError, TypeError) as e:
-        if "convert string to float" in str(e).lower() or "base_score" in str(e).lower():
-            raise RuntimeError(
-                "SHAP is incompatible with XGBoost 3.1+. Pin xgboost<3.1.0: "
-                "uv add 'xgboost>=2.0.0,<3.1.0' or pip install 'xgboost>=2.0.0,<3.1.0'"
-            ) from e
-        raise
+    finally:
+        # Restore original float
+        builtins.float = _original_float
 
     # ── 1. Beeswarm Plot (Global Feature Importance) ──
     print("[shap] Generating beeswarm plot...")
@@ -92,7 +89,7 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
     beeswarm_path = save_dir / "shap_beeswarm.png"
     plt.savefig(beeswarm_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"[shap] Saved → {beeswarm_path}")
+    print(f"[shap] Saved: {beeswarm_path}")
 
     # ── 2. Bar Plot (Mean |SHAP|) ──
     print("[shap] Generating bar plot...")
@@ -109,7 +106,7 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
     bar_path = save_dir / "shap_bar.png"
     plt.savefig(bar_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"[shap] Saved → {bar_path}")
+    print(f"[shap] Saved: {bar_path}")
 
     # ── 3. Top Dependence Plots ──
     # Find top features by mean |SHAP|
@@ -136,7 +133,7 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
     dep_path = save_dir / "shap_dependence.png"
     plt.savefig(dep_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"[shap] Saved → {dep_path}")
+    print(f"[shap] Saved: {dep_path}")
 
     # ── 4. Summary Table ──
     importance_df = pd.DataFrame({
@@ -146,7 +143,7 @@ def run_shap_analysis(model, X_test, save_dir=None, top_n=15):
 
     csv_path = save_dir / "shap_importance.csv"
     importance_df.to_csv(csv_path, index=False)
-    print(f"[shap] Saved → {csv_path}")
+    print(f"[shap] Saved: {csv_path}")
 
     print(f"\n[shap] Top {min(10, len(importance_df))} features by mean |SHAP|:")
     for _, row in importance_df.head(10).iterrows():

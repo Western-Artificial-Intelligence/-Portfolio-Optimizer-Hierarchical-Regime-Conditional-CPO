@@ -1,0 +1,20 @@
+SP_MIRROR ROBUSTNESS AUDIT — FINAL REPORT
+==================================================
+
+Overfitting Risk Level: MEDIUM  (score: 3/10)
+
+Key Findings:
+  1. Walk-forward TE std = 3.29% — high variance across folds.
+  2. Dynamic model does NOT justify its complexity (composite 11.42 > SP_mirror (regime) 10.57).
+
+Composite Robustness Ranking:
+  Model                                  Score   TE mean    TE std  Params
+  SP_mirror (regime)                    10.575    9.260%    2.129%       5
+  Clone (alpha=1)                       11.296   10.184%    2.224%       0
+  Const alpha=1.000 (1/β)               11.346   10.184%    2.224%       1
+  Const alpha=1.000 (vol)               11.346   10.184%    2.224%       1
+  SP_mirror (dynamic)                   11.418    9.674%    3.289%       2
+  → Best: SP_mirror (regime)  (composite: 10.575)
+
+Stability Verdict:
+  Model shows some sensitivity — interpret results cautiously.

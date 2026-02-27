@@ -20,7 +20,7 @@ def _save(fig, name):
     path = RESULTS_DIR / f"{name}.png"
     fig.savefig(path, dpi=FIGURE_DPI, bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    print(f"[eda] Saved → {path}")
+    print(f"[eda] Saved: {path}")
 
 
 def plot_correlation_heatmap(returns, benchmark_col="SPY US Equity"):
@@ -221,7 +221,7 @@ def print_summary_stats(returns, benchmark_col="SPY US Equity"):
     # Save to CSV
     path = RESULTS_DIR / "summary_stats.csv"
     stats.round(4).to_csv(path)
-    print(f"\n[eda] Saved stats → {path}")
+    print(f"\n[eda] Saved stats: {path}")
 
     return stats
 
@@ -263,6 +263,39 @@ def plot_clone_vs_spy(clone_returns, spy_returns):
     plt.xticks(rotation=45)
 
     _save(fig, "clone_vs_spy")
+
+
+def plot_clone_spy_equalweight(clone_returns, spy_returns, ew_returns):
+    """
+    Cumulative returns: Canadian Clone (QP), SPY Buy & Hold, and Equal-Weight TSX.
+    """
+    common = clone_returns.index.intersection(spy_returns.index).intersection(ew_returns.index)
+    clone = clone_returns.loc[common]
+    spy = spy_returns.loc[common]
+    ew = ew_returns.loc[common]
+
+    cum_clone = (1 + clone).cumprod() * 100
+    cum_spy = (1 + spy).cumprod() * 100
+    cum_ew = (1 + ew).cumprod() * 100
+
+    fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+    ax.plot(cum_spy.index, cum_spy.values, color="#e74c3c", linewidth=2,
+            label="SPY Buy & Hold", alpha=0.9)
+    ax.plot(cum_clone.index, cum_clone.values, color="#2980b9", linewidth=2,
+            label="Canadian Clone (QP)", alpha=0.9)
+    ax.plot(cum_ew.index, cum_ew.values, color="#27ae60", linewidth=2,
+            label="Equal-Weight TSX", alpha=0.9)
+
+    ax.set_title("Canadian Clone (QP), SPY Buy & Hold, and Equal-Weight TSX – Cumulative Returns",
+                 fontsize=14, fontweight="bold")
+    ax.set_ylabel("Indexed (100 = start)")
+    ax.legend(fontsize=10, framealpha=0.9)
+    ax.grid(True, alpha=0.3)
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    ax.xaxis.set_major_locator(mdates.YearLocator())
+    plt.xticks(rotation=45)
+
+    _save(fig, "clone_spy_equalweight_tsx")
 
 
 def plot_tracking_error(clone_returns, spy_returns, window=63):

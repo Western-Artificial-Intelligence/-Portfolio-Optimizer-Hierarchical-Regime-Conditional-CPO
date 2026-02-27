@@ -1,0 +1,5 @@
+,Check
+0,✓ Alpha changes only on rebalance dates.
+1,✓ All rebalance dates are actual trading days.
+2,✓ First non-trivial alpha at index 1284 (≥ L/2=126).
+3,✓ Alpha is held constant between rebalance dates (forward-fill correct).

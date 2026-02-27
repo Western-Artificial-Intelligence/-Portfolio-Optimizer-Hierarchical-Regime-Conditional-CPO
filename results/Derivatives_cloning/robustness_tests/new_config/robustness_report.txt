@@ -1,0 +1,19 @@
+SP_MIRROR ROBUSTNESS AUDIT — FINAL REPORT
+==================================================
+
+Overfitting Risk Level: LOW  (score: 1/10)
+
+Key Findings:
+  1. Dynamic model is marginal vs constant (composite 10.58 ~= SP_mirror (regime) 10.57). Consider simpler model.
+
+Composite Robustness Ranking:
+  Model                                  Score   TE mean    TE std  Params
+  SP_mirror (regime)                    10.575    9.260%    2.129%       5
+  SP_mirror (dynamic)                   10.581    9.038%    2.186%       9
+  Clone (alpha=1)                       11.296   10.184%    2.224%       0
+  Const alpha=1.000 (vol)               11.346   10.184%    2.224%       1
+  Const alpha=1.000 (1/β)               11.346   10.184%    2.224%       1
+  → Best: SP_mirror (regime)  (composite: 10.575)
+
+Stability Verdict:
+  Model appears stable and not overfit to in-sample data.

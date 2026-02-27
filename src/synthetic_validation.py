@@ -363,11 +363,11 @@ def run_synthetic_validation(returns, econ, yield_curve,
         print(f"\n[synthetic] Completed: {len(results_df)} successful (ran {total_run} paths)")
         print(f"\n[synthetic] Sharpe Ratio Summary:")
         print(f"  CPO Model:    {results_df['cpo_sharpe'].mean():.3f} "
-              f"± {results_df['cpo_sharpe'].std():.3f}")
+              f"+/- {results_df['cpo_sharpe'].std():.3f}")
         print(f"  Worker Only:  {results_df['worker_sharpe'].mean():.3f} "
-              f"± {results_df['worker_sharpe'].std():.3f}")
+              f"+/- {results_df['worker_sharpe'].std():.3f}")
         print(f"  Benchmark:    {results_df['benchmark_sharpe'].mean():.3f} "
-              f"± {results_df['benchmark_sharpe'].std():.3f}")
+              f"+/- {results_df['benchmark_sharpe'].std():.3f}")
 
     return results_df
 
@@ -432,11 +432,11 @@ def plot_synthetic_validation(results_df, save_dir=None):
     path = save_dir / "synthetic_validation.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"[synthetic] Saved → {path}")
+    print(f"[synthetic] Saved: {path}")
 
     # Save raw results
     csv_path = save_dir / "synthetic_validation_results.csv"
     results_df.to_csv(csv_path, index=False)
-    print(f"[synthetic] Saved → {csv_path}")
+    print(f"[synthetic] Saved: {csv_path}")
 
     return path

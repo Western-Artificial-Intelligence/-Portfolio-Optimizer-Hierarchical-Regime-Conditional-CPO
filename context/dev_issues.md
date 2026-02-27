@@ -93,16 +93,16 @@ The paper promises several benchmarks that don't exist yet, and the Results sect
 
 ### Part A: Implement Missing Benchmarks
 
-- [ ] **VIX Rule-Based Benchmark**: In `src/backtester.py` (or new file `src/benchmarks.py`):
+- [x] **VIX Rule-Based Benchmark**: In `src/benchmarks.py`:
   - If VIX (use SPY vol_21d as proxy, or download VIX data) > 25: reduce clone allocation to 50% (rest to cash)
   - If VIX > 35: reduce to 25%
   - Otherwise: 100% clone allocation
   - Compute Sharpe, max DD, annualized return on test period
-- [ ] **Static 60/40 Benchmark**:
+- [x] **Static 60/40 Benchmark**:
   - 60% clone returns + 40% risk-free (use 0% or 2% annualized for cash)
   - Compute same metrics
-- [ ] **Equal-Weight TSX** (already exists in strategy_comparison.csv — just verify it appears in the test-period comparison too)
-- [ ] Add all benchmarks to `phase3_comparison.csv` output
+- [x] **Equal-Weight TSX** (in `strategy_comparison.csv` and in test-period comparison via `run_equal_weight_benchmark`)
+- [x] Add all benchmarks to `phase3_comparison.csv` output
 
 ### Part B: Write Results Section in Paper
 

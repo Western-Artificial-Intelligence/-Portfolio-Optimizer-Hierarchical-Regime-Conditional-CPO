@@ -3,7 +3,7 @@ Uncertainty / Forecasting module for the AI Supervisor.
 
 Provides forecast uncertainty features as inputs to the meta-labeling
 classifier. Uses rolling volatility-based proxies that capture the same
-signal as DeepAR variance (widening uncertainty → higher risk).
+signal as DeepAR variance (widening uncertainty -> higher risk).
 
 This module is designed as a drop-in replaceable component: you can swap
 the rolling estimators for full DeepAR probabilistic forecasts later.

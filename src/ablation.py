@@ -173,7 +173,7 @@ def run_ablation_study(clone_returns, returns_all, econ, yield_curve,
             **result,
         })
         print(f"  Sharpe: {result['sharpe']:.4f} "
-              f"(Δ = {-sharpe_drop:+.4f}, {-pct_drop:+.1f}%)")
+              f"(Delta = {-sharpe_drop:+.4f}, {-pct_drop:+.1f}%)")
 
     results_df = pd.DataFrame(results)
 
@@ -181,7 +181,7 @@ def run_ablation_study(clone_returns, returns_all, econ, yield_curve,
     print(f"\n{'='*60}")
     print("ABLATION RESULTS")
     print(f"{'='*60}")
-    print(f"{'Experiment':<30s} {'Sharpe':>8s} {'Δ Sharpe':>10s} {'MaxDD':>8s}")
+    print(f"{'Experiment':<30s} {'Sharpe':>8s} {'D.Sharpe':>10s} {'MaxDD':>8s}")
     print("-" * 60)
     for _, row in results_df.iterrows():
         delta = row["sharpe"] - baseline["sharpe"]
@@ -216,10 +216,10 @@ def run_ablation_study(clone_returns, returns_all, econ, yield_curve,
     plot_path = save_dir / "ablation_study.png"
     plt.savefig(plot_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"\n[ablation] Saved → {plot_path}")
+    print(f"\n[ablation] Saved: {plot_path}")
 
     csv_path = save_dir / "ablation_results.csv"
     results_df.to_csv(csv_path, index=False)
-    print(f"[ablation] Saved → {csv_path}")
+    print(f"[ablation] Saved: {csv_path}")
 
     return results_df
