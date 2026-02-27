@@ -54,7 +54,15 @@ from src.synthetic_validation import (
     run_synthetic_validation,
     plot_synthetic_validation,
 )
-from src.config import BENCHMARK, RESULTS_DIR
+from src.config import BENCHMARK, RESULTS_DIR, GNN_RESULTS_DIR
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GNN Supervisor toggle
+# Set USE_GNN_SUPERVISOR = True  to use the CRISP-inspired GNN supervisor.
+# Set USE_GNN_SUPERVISOR = False to fall back to the original XGBoost supervisor.
+# The GNN must be trained first (phase5b). On first run, leave = False.
+# ─────────────────────────────────────────────────────────────────────────────
+USE_GNN_SUPERVISOR = False   # ← flip to True after running phase5b once
 
 
 def phase1(prices, all_fields, profiles, econ, yield_curve):
@@ -126,8 +134,71 @@ def phase2(prices_clean):
     return weights_history, clone_returns
 
 
-def phase3(clone_returns, prices_clean, econ, yield_curve):
-    """Phase 3: AI Supervisor — Meta-Labeling."""
+def phase3(clone_returns, prices_clean, all_fields, profiles, econ, yield_curve):
+    """
+    Phase 3: AI Supervisor.
+
+    Branches between two implementations:
+      USE_GNN_SUPERVISOR = False → XGBoost meta-labeling (original)
+      USE_GNN_SUPERVISOR = True  → Dynamic GNN supervisor (CRISP-inspired)
+    """
+    if USE_GNN_SUPERVISOR:
+        return _phase3_gnn(clone_returns, prices_clean, all_fields, profiles, econ, yield_curve)
+    else:
+        return _phase3_xgboost(clone_returns, prices_clean, econ, yield_curve)
+
+
+def _phase3_gnn(clone_returns, prices_clean, all_fields, profiles, econ, yield_curve):
+    """Phase 3 via GNN Supervisor."""
+    print("\n" + "=" * 60)
+    print("PHASE 3: GNN Supervisor (CRISP-inspired)")
+    print("=" * 60)
+
+    from src.gnn_supervisor import run_gnn_supervisor_pipeline, plot_alpha_over_time
+
+    supervised_returns, alpha, model = run_gnn_supervisor_pipeline(
+        clone_returns, prices_clean, all_fields, profiles, econ, yield_curve,
+        fold=4, window=20, verbose=True,
+    )
+
+    plot_alpha_over_time(alpha, save_dir=RESULTS_DIR)
+
+    spy_returns = prices_clean[BENCHMARK].pct_change(fill_method=None).iloc[1:]
+    test_start  = supervised_returns.index[0]
+    test_clone  = clone_returns.loc[test_start:]
+    test_spy    = spy_returns.loc[test_start:]
+
+    canadian_prices = prices_clean.drop(columns=[BENCHMARK], errors="ignore")
+    benchmarks = run_all_benchmarks(
+        clone_returns, spy_returns, canadian_prices,
+        test_start=str(test_start.date()),
+    )
+
+    results = {
+        "Clone + GNN Supervisor": supervised_returns,
+        "Clone (unsupervised)": test_clone,
+        "SPY Buy & Hold": test_spy,
+    }
+    for name, rets in benchmarks.items():
+        results[name] = rets.loc[rets.index >= test_start]
+
+    from src.backtester import compare_benchmarks
+    comparison = compare_benchmarks(results, test_spy)
+    comparison.to_csv(GNN_RESULTS_DIR / "phase3_gnn_comparison.csv")
+    print(f"\n[phase3-gnn] Saved: {GNN_RESULTS_DIR / 'phase3_gnn_comparison.csv'}")
+
+    plot_supervised_vs_unsupervised(supervised_returns, clone_returns, spy_returns)
+
+    # Return dummy model/X_test so downstream SHAP phases still run (on XGBoost fallback)
+    returns_all = prices_clean.pct_change().iloc[1:]
+    X_full = build_super_state(clone_returns, returns_all, econ, yield_curve)
+    X_test = X_full.loc[X_full.index > "2019-12-31"]
+
+    return supervised_returns, alpha, model, X_test
+
+
+def _phase3_xgboost(clone_returns, prices_clean, econ, yield_curve):
+    """Phase 3: original XGBoost meta-labeling supervisor."""
 
     # Get all returns for uncertainty computation
     returns_all = prices_clean.pct_change(fill_method=None).iloc[1:]
@@ -198,9 +269,32 @@ def phase3(clone_returns, prices_clean, econ, yield_curve):
 
 
 def phase4_shap(model, X_test):
-    """Phase 4: SHAP Analysis."""
+    """Phase 4: SHAP Analysis (XGBoost supervisor only)."""
+    if USE_GNN_SUPERVISOR:
+        print("\n[phase4] SHAP skipped — GNN supervisor active (not XGBoost).")
+        return None
     shap_values = run_shap_analysis(model, X_test, save_dir=RESULTS_DIR)
     return shap_values
+
+
+def phase5b_train_gnn(prices_clean, all_fields, profiles, econ, yield_curve):
+    """
+    Phase 5b: Train the GNN Supervisor (walk-forward, 4 folds).
+
+    Only needed once. After training, flip USE_GNN_SUPERVISOR = True
+    and re-run main.py to use the GNN in phase3.
+
+    Training time: ~5–15 min on GPU (RTX 3090), ~30–90 min on CPU.
+    """
+    print("\n" + "=" * 60)
+    print("PHASE 5b: GNN Supervisor Training (walk-forward)")
+    print("=" * 60)
+    from src.gnn_train import train_gnn
+    fold_results, *_ = train_gnn(
+        prices_clean, all_fields, profiles, econ, yield_curve,
+        window=20, epochs=50, patience=10, verbose=True,
+    )
+    return fold_results
 
 
 def phase5_ablation(clone_returns, prices_clean, econ, yield_curve):
@@ -233,6 +327,7 @@ def phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100):
 def main():
     print("Portfolio Optimizer - Full Pipeline")
     print("=" * 60)
+    print(f"Supervisor mode: {'GNN (CRISP)' if USE_GNN_SUPERVISOR else 'XGBoost'}")
 
     # Load all data
     prices, all_fields, profiles, econ, yield_curve = load_all()
@@ -243,12 +338,21 @@ def main():
     # Phase 2: Worker (QP Solver)
     weights_history, clone_returns = phase2(prices_clean)
 
-    # Phase 3: Supervisor (Meta-Labeling)
-    supervised_returns, regime, model, X_test = phase3(
-        clone_returns, prices_clean, econ, yield_curve
+    # Phase 5b: Train GNN if needed (only when USE_GNN_SUPERVISOR=True)
+    if USE_GNN_SUPERVISOR:
+        ckpt = GNN_RESULTS_DIR / "gnn_checkpoint_fold4.pt"
+        if not ckpt.exists():
+            print("\n[main] No GNN checkpoint found — training now (phase 5b)...")
+            phase5b_train_gnn(prices_clean, all_fields, profiles, econ, yield_curve)
+        else:
+            print(f"\n[main] GNN checkpoint found: {ckpt.name} — skipping training.")
+
+    # Phase 3: Supervisor (XGBoost or GNN depending on USE_GNN_SUPERVISOR)
+    supervised_returns, regime_or_alpha, model, X_test = phase3(
+        clone_returns, prices_clean, all_fields, profiles, econ, yield_curve
     )
 
-    # Phase 4: SHAP Analysis
+    # Phase 4: SHAP Analysis (XGBoost only — auto-skipped for GNN)
     shap_values = phase4_shap(model, X_test)
 
     # Phase 5: Ablation Study

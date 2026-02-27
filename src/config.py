@@ -11,14 +11,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 RESULTS_DIR = PROJECT_ROOT / "results2"
+GNN_RESULTS_DIR = PROJECT_ROOT / "results3"  # GNN supervisor outputs (checkpoints + plots)
 
 STOCK_HISTORY_CSV = DATA_DIR / "stock_history.csv"
 STOCK_PROFILES_CSV = DATA_DIR / "stock_profiles.csv"
 ECONOMIC_INDICATORS_CSV = DATA_DIR / "economic_indicators.csv"
 YIELD_CURVE_CSV = DATA_DIR / "yield_curve_spread.csv"
 
-# Ensure results dir exists
+# Ensure results dirs exist
 RESULTS_DIR.mkdir(exist_ok=True)
+GNN_RESULTS_DIR.mkdir(exist_ok=True)
 
 # ──────────────────────────────────────────────
 # Date ranges (from paper §5)
