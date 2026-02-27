@@ -155,7 +155,7 @@ class DynamicGNNSupervisor(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(16, 1),
-            nn.Sigmoid(),          # ensures α ∈ [0, 1]
+            # No Sigmoid here — applied manually in forward() with α floor
         )
 
         self.dropout_layer = nn.Dropout(dropout)
@@ -176,7 +176,7 @@ class DynamicGNNSupervisor(nn.Module):
         attn  : Tensor [N, N, 1]  (from GAT layer 2)
             Attention weights — interpretable: which pairs matter today.
         """
-        N, T, F = x.shape
+        N, T, n_feat = x.shape   # renamed: was 'F' which shadowed torch.nn.functional as F
 
         # ── Step 1: LSTM temporal encoding ───────────────────────────────────
         # Each stock gets its own 20-day sequence encoded.
@@ -189,7 +189,7 @@ class DynamicGNNSupervisor(nn.Module):
         # e.g., during a crisis it might upweight bank→energy propagation.
         node_emb1, attn1 = self.gat1(node_emb)              # [N, heads*gat_hidden]
         node_emb1 = self.bn1(node_emb1)
-        node_emb1 = F.elu(node_emb1)
+        node_emb1 = F.elu(node_emb1)        # F = torch.nn.functional ✓
         node_emb1 = self.dropout_layer(node_emb1)
 
         node_emb2, attn2 = self.gat2(node_emb1)             # [N, gat_hidden]
@@ -200,7 +200,12 @@ class DynamicGNNSupervisor(nn.Module):
         market_emb = node_emb2.mean(dim=0)                   # [gat_hidden]
 
         # ── Step 4: Regress to blending coefficient ───────────────────────────
-        alpha = self.output_head(market_emb).squeeze()       # scalar
+        raw = self.output_head(market_emb).squeeze()   # unbounded logit
+
+        # α floor: 0.3 + 0.7 × sigmoid(raw) → α ∈ [0.30, 1.0]
+        # Prevents the degenerate all-cash (α≈0) local minimum that the
+        # Sharpe loss inadvertently rewards (std→0 ⟹ Sharpe→∞ at α=0).
+        alpha = 0.3 + 0.7 * torch.sigmoid(raw)
 
         return alpha, attn2
 
@@ -209,27 +214,25 @@ class DynamicGNNSupervisor(nn.Module):
 # 3. Loss Function
 # ──────────────────────────────────────────────
 
-def sharpe_loss(portfolio_returns, alpha_series, lambda_turnover=0.01):
+def sharpe_loss(portfolio_returns, alpha_series, lambda_turnover=0.01,
+                lambda_defensive=0.2):
     """
     Differentiable training loss — directly maximizes risk-adjusted returns.
 
-    No binary labels needed. The model is trained end-to-end on:
-        Loss = −Sharpe × √252  +  λ × mean|Δα|
+        Loss = −Sharpe × √252  +  λ × mean|Δα|  +  λ₂ × max(0, 0.5 − mean(α))²
 
-    A lower loss = higher annualized Sharpe + lower daily regime switching.
+    The third term penalises the model for having a mean α below 0.5,
+    preventing the degenerate 'always cash' local minimum.
 
     Parameters
     ----------
-    portfolio_returns : Tensor [B]  — daily portfolio returns in mini-batch
-    alpha_series      : Tensor [B]  — corresponding α values
-    lambda_turnover   : float       — penalty weight for excessive switching
-
-    Returns
-    -------
-    loss : scalar Tensor
+    portfolio_returns  : Tensor [B]  — daily portfolio returns in mini-batch
+    alpha_series       : Tensor [B]  — corresponding α values
+    lambda_turnover    : float       — penalty for excessive day-to-day switching
+    lambda_defensive   : float       — penalty for α drifting below 0.5
     """
     mean_ret = portfolio_returns.mean()
-    std_ret  = portfolio_returns.std() + 1e-8
+    std_ret  = portfolio_returns.std() + 1e-6
     annualized_sharpe = mean_ret / std_ret * (252 ** 0.5)
 
     # Turnover: penalise large swings in α between consecutive days
@@ -238,4 +241,8 @@ def sharpe_loss(portfolio_returns, alpha_series, lambda_turnover=0.01):
     else:
         turnover = torch.tensor(0.0)
 
-    return -annualized_sharpe + lambda_turnover * turnover
+    # Defensiveness penalty: discourage mean α from drifting below 0.5
+    mean_alpha = alpha_series.mean()
+    defensive_penalty = torch.clamp(0.5 - mean_alpha, min=0.0) ** 2
+
+    return -annualized_sharpe + lambda_turnover * turnover + lambda_defensive * defensive_penalty

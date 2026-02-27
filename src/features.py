@@ -28,7 +28,7 @@ def compute_returns(prices, method="simple"):
     if method == "log":
         returns = np.log(prices / prices.shift(1))
     else:
-        returns = prices.pct_change()
+        returns = prices.pct_change(fill_method=None)
 
     returns = returns.iloc[1:]  # drop first NaN row
     print(f"[features] Computed {method} returns: {returns.shape}")

@@ -109,7 +109,7 @@ def rolling_optimization(prices, benchmark_col=BENCHMARK,
         Summary metrics.
     """
     # Compute returns
-    returns = prices.pct_change().iloc[1:]
+    returns = prices.pct_change(fill_method=None).iloc[1:]
 
     spy_returns = returns[benchmark_col]
     canadian_returns = returns.drop(columns=[benchmark_col], errors="ignore")

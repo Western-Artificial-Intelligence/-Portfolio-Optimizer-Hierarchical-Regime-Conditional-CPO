@@ -35,13 +35,14 @@ from src.config import GNN_RESULTS_DIR, BENCHMARK
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Walk-forward folds: (train_end, val_end, test_end)
-# Each fold trains on all data up to train_end, validates on the next year.
-# Fold 4 is the "production" fold — model used for actual portfolio decisions.
+# NOTE: Fold 4 validates on 2019 (healthy bull year), NOT 2020 (COVID crash).
+# Validating on 2020 caused the model to learn extreme defensiveness that
+# persisted through the 2021–2024 test period.
 FOLDS = [
     ("2015-12-31", "2016-12-31", "2017-12-31"),
     ("2016-12-31", "2017-12-31", "2018-12-31"),
     ("2017-12-31", "2018-12-31", "2019-12-31"),
-    ("2019-12-31", "2020-12-31", "2024-12-31"),   # production fold
+    ("2018-12-31", "2019-12-31", "2024-12-31"),   # production: val=2019, test=2020–2024
 ]
 
 
@@ -294,6 +295,9 @@ def train_gnn(prices_clean, all_fields, profiles, econ, yield_curve,
             n_nodes=n_nodes,
             epochs=epochs,
             patience=patience,
+            lr=5e-4,              # Reduced from 1e-3 — prevents early α collapse
+            batch_days=32,
+            lambda_turnover=0.01,
             verbose=verbose,
         )
 

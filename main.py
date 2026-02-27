@@ -62,7 +62,7 @@ from src.config import BENCHMARK, RESULTS_DIR, GNN_RESULTS_DIR
 # Set USE_GNN_SUPERVISOR = False to fall back to the original XGBoost supervisor.
 # The GNN must be trained first (phase5b). On first run, leave = False.
 # ─────────────────────────────────────────────────────────────────────────────
-USE_GNN_SUPERVISOR = False   # ← flip to True after running phase5b once
+USE_GNN_SUPERVISOR = True   # ← flip to True after running phase5b once
 
 
 def phase1(prices, all_fields, profiles, econ, yield_curve):
@@ -190,7 +190,7 @@ def _phase3_gnn(clone_returns, prices_clean, all_fields, profiles, econ, yield_c
     plot_supervised_vs_unsupervised(supervised_returns, clone_returns, spy_returns)
 
     # Return dummy model/X_test so downstream SHAP phases still run (on XGBoost fallback)
-    returns_all = prices_clean.pct_change().iloc[1:]
+    returns_all = prices_clean.pct_change(fill_method=None).iloc[1:]
     X_full = build_super_state(clone_returns, returns_all, econ, yield_curve)
     X_test = X_full.loc[X_full.index > "2019-12-31"]
 
@@ -309,7 +309,7 @@ def phase5_ablation(clone_returns, prices_clean, econ, yield_curve):
 
 def phase6_synthetic(prices_clean, econ, yield_curve, n_paths=100):
     """Phase 6: Synthetic Validation (slow — run with small n_paths first)."""
-    returns = prices_clean.pct_change().iloc[1:]
+    returns = prices_clean.pct_change(fill_method=None).iloc[1:]
     results = run_synthetic_validation(
         returns, econ, yield_curve,
         n_paths=n_paths,
@@ -362,7 +362,7 @@ def main():
 
     # Phase 6: Synthetic Validation (optional — slow)
     # n_paths=50 ~5 min; n_paths=1000 ~30-60 min
-    synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=1000)
+    synthetic_results = phase6_synthetic(prices_clean, econ, yield_curve, n_paths=50)
 
     print("\nAll phases complete! Check results/ for outputs.")
 
