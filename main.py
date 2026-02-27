@@ -186,6 +186,14 @@ def phase3(clone_returns, prices_clean, econ, yield_curve):
     X_full = build_super_state(clone_returns, returns_all, econ, yield_curve)
     X_test = X_full.loc[X_full.index > "2019-12-31"]
 
+    # Ensure X_test has exactly the same columns the model was trained on
+    # (build_super_state may produce different columns on full vs train data)
+    try:
+        model_features = model.get_booster().feature_names
+    except AttributeError:
+        model_features = list(X_test.columns)
+    X_test = X_test.reindex(columns=model_features)
+
     return supervised_returns, regime, model, X_test
 
 

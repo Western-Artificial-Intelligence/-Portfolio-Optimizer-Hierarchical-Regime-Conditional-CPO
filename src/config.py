@@ -10,7 +10,7 @@ from pathlib import Path
 # ──────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-RESULTS_DIR = PROJECT_ROOT / "results"
+RESULTS_DIR = PROJECT_ROOT / "results2"
 
 STOCK_HISTORY_CSV = DATA_DIR / "stock_history.csv"
 STOCK_PROFILES_CSV = DATA_DIR / "stock_profiles.csv"
