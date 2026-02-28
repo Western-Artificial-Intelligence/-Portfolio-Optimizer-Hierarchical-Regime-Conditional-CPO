@@ -59,7 +59,7 @@ Traditional portfolio optimization assumes stationarity and treats assets indepe
 
 Portfolio optimization has been a cornerstone of quantitative finance since Markowitz's mean-variance framework \cite{markowitz1952}, yet its practical application remains fundamentally limited by a single assumption: statistical stationarity. Classical quadratic optimizers compute allocations from historical average returns and covariances, treating all past data as equally informative. This produces portfolios optimized for the \emph{average} historical environment—not the \emph{current} one. When the market regime shifts, as it did during the 2020 COVID-19 crash and the 2022 inflation-driven downturn, these allocations fail catastrophically. A portfolio overweight in high-growth equities during a low-volatility bull market will suffer outsized drawdowns the moment correlations spike and volatility regimes shift \cite{chan2023}.
 
-A natural response has been to apply deep reinforcement learning (RL) to portfolio optimization, training agents to learn allocation policies directly from market interaction \cite{sood2023}. However, RL approaches face severe structural obstacles in financial markets. First, financial data is inherently scarce—decades of daily data yield only thousands of independent observations, far too few to train high-capacity RL policies without catastrophic overfitting. Second, the reward signal is extremely noisy: daily returns have signal-to-noise ratios well below 0.1, making it nearly impossible for RL agents to distinguish genuine alpha from statistical noise. Third, the non-stationarity of markets means that the environment itself changes during training, violating the stationary Markov Decision Process assumption that underpins RL convergence guarantees. In practice, RL-based portfolio optimizers consistently underperform convex mathematical methods on out-of-sample data, often learning to exploit artifacts of the training period rather than generalizable market structure.
+A natural response has been to apply deep reinforcement learning (RL) to portfolio optimization, training agents to learn allocation policies directly from market interaction \cite{sood2023}. While recent advances like Diffusion-Augmented RL (DARL) utilize generative models (e.g., DDPMs) to synthesize crisis scenarios and improve stress resilience \cite{choudhary2025}, RL approaches broadly still face severe structural obstacles in financial markets. First, financial data is inherently scarce—decades of daily data yield only thousands of independent observations, far too few to train high-capacity RL policies without catastrophic overfitting. Second, the reward signal is extremely noisy: daily returns have signal-to-noise ratios well below 0.1, making it nearly impossible for RL agents to distinguish genuine alpha from statistical noise. Third, the non-stationarity of markets means that the environment itself changes during training, violating the stationary Markov Decision Process assumption that underpins RL convergence guarantees. In practice, RL-based portfolio optimizers consistently underperform convex mathematical methods on out-of-sample data, often learning to exploit artifacts of the training period rather than generalizable market structure.
 
 This motivates a hybrid approach: preserve the convex optimality guarantees of mathematical optimization for the core allocation problem, while adding a learned supervisory layer that adapts to changing market conditions. Chan (2023) introduced Conditional Portfolio Optimization (CPO), which frames this adaptation as a supervised learning problem rather than an RL problem—bypassing the reward sparsity and non-stationarity issues that plague reinforcement learning in finance \cite{chan2023}.
 
@@ -106,6 +106,9 @@ Classical portfolio construction via quadratic programming (QP) minimizes tracki
 
 \subsection{Conditional Portfolio Optimization and Meta-Labeling}
 Chan (2023) introduced Conditional Portfolio Optimization (CPO), using supervised ML to predict optimal allocations conditional on macroeconomic features \cite{chan2023}. López de Prado (2018) proposed \emph{meta-labeling}: training a secondary classifier to predict whether a primary model's signal will be profitable \cite{lopezdeprado2018}. We synthesize these ideas within our hierarchical framework, using continuous blending with both tabular (XGBoost) and relational (GNN) supervisor architectures to evaluate which approach best captures regime dynamics.
+
+\subsection{Macroeconomic Regime Detection}
+Recent literature emphasizes extracting regime states from stable macroeconomic data rather than noisy asset returns to improve tactical allocation. For instance, Oliveira et al. (2025) demonstrate that classifying market regimes via unsupervised clustering on the comprehensive FRED-MD macroeconomic dataset significantly outperforms traditional benchmarks \cite{oliveira2025}. While their approach relies on computing discrete, probabilistic regime states as priors for conditional expected returns, our framework similarly leverages external macroeconomic features but trains a GNN end-to-end to continuously modulate a blending coefficient $\alpha_t$ directly from the Sharpe ratio objective—bypassing explicit regime classification entirely.
 
 \subsection{Graph Neural Networks in Finance}
 Graph Neural Networks have emerged as a natural architecture for financial markets, which are inherently relational systems. Early applications used static correlation graphs as input to GCN layers \cite{chen2018}. The CRISP framework \cite{crisp2024} (Crisis-Resilient Investment through Spatio-temporal Patterns) represents the state of the art: it demonstrated that \emph{learning} graph topology dynamically via attention—rather than imposing it via thresholding—achieves 94\% improvement over static-graph baselines and 707\% over equal-weight on a 2022--2024 crisis-period test. Critically, CRISP found that the model autonomously upweighted defensive sector connections by 49\% during the 2022 crash, without any explicit crisis labeling during training.
@@ -264,7 +267,7 @@ AdamW optimizer (lr $= 5 \times 10^{-4}$, weight\_decay $= 10^{-4}$) with cosine
 \section{Synthetic Validation (Chan 2018)}
 %% ============================================
 
-A single historical backtest is insufficient to establish strategy robustness \cite{chan2018}. We adopt the simulation-based validation framework proposed by Chan (2018).
+A single historical backtest is insufficient to establish strategy robustness \cite{chan2018}. While recent works leverage diffusion models to generate synthetic crash scenarios for model stress testing \cite{choudhary2025}, we adopt the robust stationary block bootstrap validation framework proposed by Chan (2018) to preserve complex cross-asset interdependencies.
 
 \subsection{Synthetic Market Generation}
 $M = 1{,}000$ synthetic market histories are generated via stationary block bootstrap (mean block length 21 days), preserving cross-asset correlations and volatility clustering while breaking long-run regime persistence.
@@ -287,39 +290,6 @@ We compare the distribution of Sharpe ratios across all $M$ simulations for:
 \end{itemize}
 
 
-%% ============================================
-\section{Interpretability: Attention Weight Analysis}
-%% ============================================
-
-Unlike the SHAP analysis used for the XGBoost Supervisor, the GNN Supervisor's interpretability comes from \textbf{attention weight visualization}. The matrix $\{\alpha_{ij}^{(k)}\}$ directly answers: \emph{which stock-pair relationship did the model weight most heavily when making today's allocation decision?}
-
-We present:
-\begin{itemize}
-    \item \textbf{Attention heatmaps} at representative dates (pre-COVID, COVID crash peak, early 2022 inflation inflection, recovery 2023). We expect the model to shift attention toward defensive sectors (Utilities, Telecom, Financials) and away from cyclical sectors (Energy, Consumer Discretionary) during crisis periods.
-    \item \textbf{Regime alignment analysis}: We verify that $\alpha_t$ drops below 0.5 during the COVID crash (February--April 2020) and the inflation shock (January--October 2022), \emph{without having been given explicit crisis labels during training}.
-    \item \textbf{Emergent sparsity analysis}: The fraction of attention weights with $\alpha_{ij} < 0.01$ after training. Consistent with CRISP \cite{crisp2024}, we expect $>90\%$ of all $N(N-1)$ edges to be effectively zero—the model learns to identify the small subset of relationships that carry regime information.
-\end{itemize}
-
-% ============================================
-% FIGURE 4: ATTENTION HEATMAP COMPARISON
-% ============================================
-% DEV TODO: Generate a side-by-side attention heatmap showing:
-%   - Left panel: Pre-COVID (e.g., Jan 2020) attention matrix A_{ij}
-%   - Right panel: COVID crash peak (e.g., Mar 2020) attention matrix A_{ij}
-%   - Rows/columns = 33 assets (grouped by GICS sector)
-%   - Color scale: attention weight magnitude (0 to max)
-%   - Highlight how defensive sectors (Utilities, Telecom) gain attention during crisis
-%   - Optionally add a third panel for 2022 inflation shock
-% Save as: attention_heatmap.png
-\begin{figure}[H]
-\centering
-% \includegraphics[width=\columnwidth]{attention_heatmap.png}
-\fbox{\parbox{0.95\columnwidth}{\centering\vspace{2.5cm}\textbf{PLACEHOLDER: Attention Heatmap Comparison}\\[0.5em]
-\small Left: Pre-COVID (Jan 2020) \quad Right: COVID crash (Mar 2020)\\Assets grouped by GICS sector. Show attention shift to defensive sectors.\vspace{2.5cm}}}
-\caption{GAT attention weights $\alpha_{ij}$ before and during the COVID-19 crash. Assets are grouped by GICS sector. During the crisis, the model autonomously upweights connections involving defensive sectors (Utilities, Telecom) and downweights cyclical sectors (Energy, Consumer Discretionary).}
-\label{fig:attention_heatmap}
-\end{figure}
-
 
 %% ============================================
 \section{Data \& Experimental Setup}
@@ -338,7 +308,7 @@ We present:
     \item Global macro: \texttt{T10Y2Y} (yield curve spread), \texttt{DXY} (dollar index), \texttt{MOVE} (bond vol), \texttt{IG\_SPREAD}, yield curve inversion flag.
 \end{itemize}
 
-All features are computed from existing Bloomberg Terminal data at Ivey Business School. No additional data pulls are required beyond the prior architecture.
+All equity and macro series were sourced directly from the Bloomberg Terminal at Ivey Business School. A significant practical advantage of this pipeline is that Bloomberg's \texttt{PX\_LAST} and volume fields arrive pre-cleaned, with both historical corporate actions (splits/dividends) and survivorship bias retroactively handled by the provider. No synthetic interpolation or fill-forward artifacting was required, ensuring the GNN's temporal encoder processed true realized trajectories.
 
 \subsection{Time Periods}
 \begin{itemize}
@@ -621,6 +591,9 @@ Y.~Xie \emph{et al.}, ``On Replicating the S\&P 500 Index,'' 2010.
 \bibitem{sood2023}
 S.~Sood \emph{et al.}, ``Deep Reinforcement Learning for Portfolio Optimization,'' 2023.
 
+\bibitem{choudhary2025}
+H.~Choudhary, A.~Orra, and M.~Thakur, ``Diffusion-Augmented Reinforcement Learning for Robust Portfolio Optimization under Stress Scenarios,'' \emph{NeurIPS Workshop: GenAI in Finance}, 2025.
+
 \bibitem{lundberg2017}
 S.~Lundberg and S.~Lee, ``A Unified Approach to Interpreting Model Predictions,'' \emph{NeurIPS}, 2017.
 
@@ -628,6 +601,9 @@ S.~Lundberg and S.~Lee, ``A Unified Approach to Interpreting Model Predictions,'
 
 \bibitem{crisp2024}
 Author(s), ``CRISP: Crisis-Resilient Investment through Spatio-temporal Patterns,'' 2024.
+
+\bibitem{oliveira2025}
+D.~C.~Oliveira \emph{et al.}, ``Tactical Asset Allocation with Macroeconomic Regime Detection,'' \emph{arXiv preprint arXiv:2503.11499}, 2025.
 
 \bibitem{chen2018}
 Y.~Chen \emph{et al.}, ``A Graph Convolutional Network for Financial Time Series Prediction,'' 2018.
