@@ -24,6 +24,10 @@ from src.config import GNN_RESULTS_DIR, BENCHMARK
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# ── Institutional parameters ─────────────────────────────────────────────────
+DRAWDOWN_STOP    = 0.10   # α clamped to α-floor if cumulative DD exceeds 10%
+ALPHA_FLOOR_HARD = 0.30   # model's minimum α (matches the trained floor)
+
 
 # ──────────────────────────────────────────────
 # 1. Checkpoint Loading
@@ -155,9 +159,33 @@ def run_gnn_supervisor_pipeline(clone_returns, prices_clean, all_fields,
 
     alpha_series = pd.Series(alphas, index=test_dates, name="gnn_alpha")
 
+    # ── Institutional Feature 1: Hard Drawdown Stop ──────────────────────────
+    # If cumulative portfolio drawdown from its running peak exceeds DRAWDOWN_STOP,
+    # override α → ALPHA_FLOOR_HARD regardless of model output.
+    # This is a compliance circuit breaker, not a model decision.
+    clone_test_raw = clone_returns.reindex(test_dates).fillna(0.0)
+    cum_ret   = (1 + clone_test_raw * alpha_series).cumprod()
+    running_peak = cum_ret.cummax()
+    drawdown     = (cum_ret - running_peak) / running_peak  # always ≤ 0
+    hard_stop_active = drawdown < -DRAWDOWN_STOP
+    alpha_series_adj = alpha_series.copy()
+    alpha_series_adj[hard_stop_active] = ALPHA_FLOOR_HARD
+    n_stopped = hard_stop_active.sum()
+    if verbose and n_stopped > 0:
+        print(f"[gnn_supervisor] Hard stop activated on {n_stopped} days "
+              f"(>{DRAWDOWN_STOP*100:.0f}% drawdown) — α forced to {ALPHA_FLOOR_HARD}")
+
+    alpha_series = alpha_series_adj
+
     # ── Blend clone with cash ────────────────────────────────────────────────
-    clone_test         = clone_returns.reindex(test_dates).fillna(0.0)
+    clone_test         = clone_test_raw
     supervised_returns = (alpha_series * clone_test).rename("gnn_supervised")
+
+    # ── Institutional Feature 2: Attention Logging (Compliance Report) ───────
+    # For each test day, record the top-5 highest-attention stock pairs.
+    # This gives compliance teams a human-readable log of *why* α changed.
+    tickers = ckpt.get("tickers", [f"Asset_{i}" for i in range(ckpt["n_nodes"])])
+    _save_attention_log(attn_list, test_dates, tickers)
 
     # ── Logging & regime check ───────────────────────────────────────────────
     if verbose:
@@ -196,31 +224,81 @@ def _check_regime(alpha_series, start, end, label):
     except Exception:
         pass
 
-
-# ──────────────────────────────────────────────
-# 3. Attention Visualisation (optional)
-# ──────────────────────────────────────────────
-
-def plot_alpha_over_time(alpha_series, save_dir=None):
+def _save_attention_log(attn_list, dates, tickers, top_k=5):
     """
-    Plot daily GNN blending coefficient α over time.
-    Highlights known crisis periods for visual validation.
+    Institutional Feature 2: Attention Logging.
+
+    For each test day, extract the top-k highest-attention stock pairs
+    from the GAT attention matrix and save as a CSV compliance report.
+
+    This answers the question 'why did the model reduce α on day X?'
+    by showing which cross-asset relationships the model was attending to.
+
+    Output: results5/gnn_attention_log.csv
+    Columns: date, rank, source_ticker, target_ticker, attention_weight
+    """
+    rows = []
+    for i, (date, attn) in enumerate(zip(dates, attn_list)):
+        # attn shape: [N, N, 1] — squeeze to [N, N]
+        attn_sq = attn.squeeze(-1) if attn.ndim == 3 else attn
+        N = attn_sq.shape[0]
+        # Flatten upper triangle (directed pairs)
+        pairs = []
+        for src in range(N):
+            for tgt in range(N):
+                if src != tgt:
+                    pairs.append((src, tgt, float(attn_sq[src, tgt])))
+        # Sort by attention weight descending, take top_k
+        pairs.sort(key=lambda x: -x[2])
+        for rank, (src, tgt, w) in enumerate(pairs[:top_k], start=1):
+            src_name = tickers[src] if src < len(tickers) else f"Asset_{src}"
+            tgt_name = tickers[tgt] if tgt < len(tickers) else f"Asset_{tgt}"
+            rows.append({
+                "date": date.date(),
+                "rank": rank,
+                "source": src_name,
+                "target": tgt_name,
+                "attention": round(w, 6),
+            })
+
+    if rows:
+        df = pd.DataFrame(rows)
+        path = GNN_RESULTS_DIR / "gnn_attention_log.csv"
+        df.to_csv(path, index=False)
+        print(f"[gnn_supervisor] Attention log saved: {path}")
+        print(f"  → {len(dates)} days × top-{top_k} pairs = {len(rows)} rows")
+
+
+def plot_alpha_over_time(alpha_series, clone_returns=None, spy_returns=None,
+                         save_dir=None):
+    """
+    Institutional Feature 3: GNN vs SPY cumulative return plot.
+
+    Plot 1: Daily α with crisis shading.
+    Plot 2 (if returns provided): Cumulative returns — GNN, clone, SPY.
     """
     if save_dir is None:
         save_dir = GNN_RESULTS_DIR
     save_dir = Path(save_dir)
 
-    fig, ax = plt.subplots(figsize=(14, 4))
+    n_panels = 2 if (clone_returns is not None and spy_returns is not None) else 1
+    fig, axes = plt.subplots(n_panels, 1,
+                             figsize=(14, 4 * n_panels),
+                             sharex=(n_panels > 1))
+    if n_panels == 1:
+        axes = [axes]
 
+    # ── Panel 1: α over time ─────────────────────────────────────────────────
+    ax = axes[0]
     ax.fill_between(alpha_series.index, alpha_series.values,
                     alpha=0.4, color="#2ecc71", label="α (GNN confidence)")
     ax.plot(alpha_series.index, alpha_series.values,
             color="#27ae60", linewidth=0.8)
-
     ax.axhline(0.5, color="gray", linestyle="--", linewidth=0.8,
                label="Neutral threshold (α = 0.5)")
+    ax.axhline(DRAWDOWN_STOP + ALPHA_FLOOR_HARD, color="#e74c3c",
+               linestyle=":", linewidth=1.2, label="Hard stop floor")
 
-    # Mark known crisis periods
     crises = [
         ("2020-02-20", "2020-04-15", "#e74c3c", "COVID"),
         ("2022-01-01", "2022-10-15", "#e67e22", "Inflation"),
@@ -233,13 +311,44 @@ def plot_alpha_over_time(alpha_series, save_dir=None):
             pass
 
     ax.set_ylim(-0.05, 1.05)
-    ax.set_ylabel("α (1 = fully invested, 0 = cash)", fontsize=11)
+    ax.set_ylabel("α (1=fully invested, 0=cash)", fontsize=11)
     ax.set_title("GNN Supervisor — Daily Blending Coefficient α", fontsize=13)
     ax.legend(fontsize=9, loc="lower right")
     ax.grid(True, alpha=0.3)
 
-    plt.tight_layout()
+    # ── Panel 2: Cumulative returns ──────────────────────────────────────────
+    if n_panels == 2:
+        ax2 = axes[1]
+        common_idx = alpha_series.index
 
+        gnn_ret   = (alpha_series * clone_returns.reindex(common_idx).fillna(0))
+        spy_ret   = spy_returns.reindex(common_idx).fillna(0)
+        clone_ret = clone_returns.reindex(common_idx).fillna(0)
+
+        cum_gnn   = (1 + gnn_ret).cumprod()
+        cum_spy   = (1 + spy_ret).cumprod()
+        cum_clone = (1 + clone_ret).cumprod()
+
+        ax2.plot(cum_gnn.index,   cum_gnn.values,   label="Clone + GNN Supervisor",
+                 color="#2ecc71", linewidth=2.0)
+        ax2.plot(cum_spy.index,   cum_spy.values,   label="SPY Buy & Hold",
+                 color="#3498db", linewidth=1.5, linestyle="--")
+        ax2.plot(cum_clone.index, cum_clone.values, label="Clone (no supervisor)",
+                 color="#95a5a6", linewidth=1.2, linestyle=":")
+
+        for start, end, color, name in crises:
+            try:
+                ax2.axvspan(pd.Timestamp(start), pd.Timestamp(end),
+                            alpha=0.15, color=color)
+            except Exception:
+                pass
+
+        ax2.set_ylabel("Cumulative Return (1 = breakeven)", fontsize=11)
+        ax2.set_title("Cumulative Performance: GNN Supervisor vs SPY", fontsize=13)
+        ax2.legend(fontsize=9, loc="upper left")
+        ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
     path = save_dir / "gnn_alpha_over_time.png"
     plt.savefig(path, dpi=150, bbox_inches="tight")
     plt.close()

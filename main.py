@@ -161,9 +161,12 @@ def _phase3_gnn(clone_returns, prices_clean, all_fields, profiles, econ, yield_c
         fold=4, window=20, verbose=True,
     )
 
-    plot_alpha_over_time(alpha, save_dir=RESULTS_DIR)
-
     spy_returns = prices_clean[BENCHMARK].pct_change(fill_method=None).iloc[1:]
+    plot_alpha_over_time(alpha,
+                         clone_returns=clone_returns,
+                         spy_returns=spy_returns,
+                         save_dir=GNN_RESULTS_DIR)  # → results5/
+
     test_start  = supervised_returns.index[0]
     test_clone  = clone_returns.loc[test_start:]
     test_spy    = spy_returns.loc[test_start:]
