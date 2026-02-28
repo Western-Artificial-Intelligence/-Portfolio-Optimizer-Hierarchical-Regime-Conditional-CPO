@@ -30,9 +30,9 @@ import sys
 sys.path.insert(0, ".")
 
 from src.config import GNN_RESULTS_DIR, RESULTS_DIR as R2
-from src.data_loader import load_all_data
-from src.features import compute_features
-from src.qp_solver import run_qp_solver
+from src.data_loader import load_all
+from src.features import filter_sparse_tickers
+from src.qp_solver import rolling_optimization
 from src.gnn_supervisor import run_gnn_supervisor_pipeline
 from src.config import BENCHMARK
 
@@ -68,11 +68,11 @@ def block_bootstrap_sharpe(returns: pd.Series,
 
 def main():
     print("Loading data...")
-    prices, all_fields, profiles, econ, yield_curve = load_all_data()
-    prices_clean = prices.dropna(axis=1, thresh=int(0.5 * len(prices)))
+    prices, all_fields, profiles, econ, yield_curve = load_all()
+    prices_clean, _ = filter_sparse_tickers(prices, min_coverage=0.5)
 
     print("Running QP solver...")
-    _, clone_returns = run_qp_solver(prices_clean)
+    _, clone_returns = rolling_optimization(prices_clean, benchmark_col=BENCHMARK, lookback=252*5, rebal_freq="ME")
 
     spy_returns = prices_clean[BENCHMARK].pct_change(fill_method=None).iloc[1:]
 
