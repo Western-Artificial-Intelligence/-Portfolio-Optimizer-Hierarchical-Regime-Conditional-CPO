@@ -1,0 +1,206 @@
+% ==================================
+% DO NOT EDIT
+% ==================================
+\documentclass[conference]{IEEEtran}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{float}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\makeatletter
+\newcommand{\linebreakand}{%
+  \end{@IEEEauthorhalign}
+  \hfill\mbox{}\par
+  \mbox{}\hfill\begin{@IEEEauthorhalign}
+}
+\makeatother
+
+% ==================================
+% END
+% ==================================
+
+\begin{document}
+
+
+\title{Paper Title}
+
+\author{
+
+\IEEEauthorblockN{Full Name}
+\IEEEauthorblockA{
+    \textit{School} \\
+    email@email.com
+}
+
+\and
+\IEEEauthorblockN{Full Name}
+\IEEEauthorblockA{
+    \textit{School} \\
+    email@email.com
+}
+
+\and
+\IEEEauthorblockN{Full Name}
+\IEEEauthorblockA{
+    \textit{School} \\
+    email@email.com
+}
+
+\and
+\IEEEauthorblockN{Full Name}
+\IEEEauthorblockA{
+    \textit{School} \\
+    email@email.com
+}
+
+
+% Uncomment below to add more authors
+
+% \linebreakand 
+% \IEEEauthorblockN{Full Name}
+% \IEEEauthorblockA{
+%     \textit{Queen's University} \\
+%     email@email.com
+% }
+% 
+% \and
+% \IEEEauthorblockN{Full Name}
+% \IEEEauthorblockA{
+%     \textit{Queen's University} \\
+%     email@email.com
+% }
+% 
+% \and
+% \IEEEauthorblockN{Full Name}
+% \IEEEauthorblockA{
+%     \textit{Queen's University} \\
+%     email@email.com
+% }
+
+
+} % end authors
+\maketitle
+
+
+
+\begin{abstract}
+Complete this section last. This should be a very concise summary of the entire paper that describes the motivation of your work, the problem you tackled, the methodology you used, the results you achieved, and the significance of your results. You can also include a GitHub link here. Please limit this section to 100-150 words total. 
+\end{abstract}
+
+\section{Introduction}
+
+This is the paper template for CUCAI 2026. Your paper should follow this structure, replacing the text, tables, images, etc with your own as needed. Make a copy of the project by clicking Menu (top left) $\rightarrow$ Copy Project. Double-click something in the PDF to jump to it in the code. If there is some formatting not found in this template that you'd like to use, reference \href{https://www.overleaf.com/learn}{the overleaf docs}. You should aim to have your paper be 3-5 pages in length, including references. A good strategy to tackle this paper is to split up each section with your team, and build up a paper that says everything you want it to say, without caring about the length. Once you're happy with the content of the paper, strip it down to 3-5 pages – keep it concise and rid of any fluff.
+
+\subsection{Motivation}
+
+In this section, using \textbf{recent} external references from \textbf{\textit{reputable}} sources (typically conference and journal papers), develop an argument as to why you're working on this project/problem. Google Scholar is an excellent search tool. This section should convince the reader that the work you're doing is important, impactful, and relevant. For example, a paper about using machine learning for activity recognition might have the following opening statement:
+
+\begin{quote}
+With emerging applications in the areas of daily life monitoring and assisted living \cite{ko2023large}, human activity recognition (HAR) plays an increasingly important role in modern daily life. 
+\end{quote}
+
+Note: When using acronyms, when you first use the term, state the term in proper English, followed by the acronym in brackets (as in above HAR example). From then on, use the acronym. Do not use any acronyms in the title or abstract.
+
+Finish this section by briefly introducing the problem you aim to solve.
+
+\subsection{Related Works}
+
+In this section, using recent external references from reputable sources, discuss how other works have tackled this problem, their methodology, and what results they achieved. Address what challenges they've faced, and what gaps remained to be worked on. When using terminology that might not be well known to the average reader, given the page constraint, don't worry about explaining what things mean if you are running out of space. Instead you can direct the reader to references that are a good resource for learning more about the respective subject. Assume that the audience has a University level understanding of machine learning, programming, and mathematics.
+
+\subsection{Problem Definition}
+
+Use this section to formally state the problem you aim to solve. Ideally, you'll expand on material in section 1B and setup your problem with respect to other approaches that you've found in the literature.  
+
+It's awesome to read a paper that lays out the problems other people have faced, and the formulate their problem to try and solve those problems.
+
+When using equations, math, or variables, ensure that they are in italics. For example, given $X$, the goal is to predict $y$. Or, an automaton is defined as the object, $G=(\Sigma, X, x_0,x_m, \delta)$. When using math inline, there's no need to reference it. However, if you want to put more emphasis on an equation, give the equation its own line, such as the backpropagation equation,
+
+\begin{equation} \label{backprop}
+\frac{\partial E}{\partial w_{ij}} = \frac{\partial E}{\partial o_j} \cdot \frac{\partial o_j}{\partial z_j} \cdot \frac{\partial z_j}{\partial w_{ij}},
+\end{equation}
+
+and make sure to add a comma or period appropriately at the end of the equation. Make sure to add the respective equation number after as above, so you can reference the above equation throughout the rest of the paper as \eqref{backprop}. Note how you can use \verb|\ref|, \verb|\eqref|, and \verb|\cite| to refer to things by a label. 
+
+% full-width figure
+\begin{figure*} 
+\centering
+\includegraphics[width=\textwidth]{cnn.png}
+\caption{Example of an image spanning the entire width.}
+\label{cnn}
+\end{figure*}
+
+\section{Methodology}
+
+In this section, describe your overall design process, and walk through the details of each step. 
+
+\begin{enumerate}
+    \item First, start with presenting the data. 
+    \item Second, describe your proposed solution(s). Ideally, your proposed design process/solution is in tune with the work mentioned in your Related Works section.
+    \item Third, describe how you evaluate your proposed solution(s).
+    \item Lastly, present any other details about additional analysis/procedures you performed. For example, if you performed additional analysis on determining the optimal solution of your proposed solutions, describe exactly how you went about setting that analysis up. 
+\end{enumerate}
+
+\vspace{1em} % force some vertical spacing
+
+Feel free to add subsections as needed using \verb|\subsection|.
+
+\section{Results}
+In this section, present your results in the form of tables, diagrams, and plots. Discuss your results and the significance of each. Continue the discussion to explain what you learned and discovered over the course of your project. How did your model perform? What insights did it generate and how did you interpret it? Did your methods work as expected? Are there advantages (or disadvantages) to the methods you used?
+
+Below is an example of a table to display results. You can add columns and rows. Describe what information is presented in the table in the caption. Make sure to describe the significance of the information presented in each table and figure. Also, \href{https://www.tablesgenerator.com/}{here} is a useful website for generating tables.
+
+\begin{table}[H]
+\centering
+\caption{Example table showing the results of an experiment.}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\multicolumn{1}{|c|}{\textbf{Model}} & \textbf{Accuracy} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\ \hline
+CNN                                  & 97.78\%           & 82.32\%            & 88.66\%         & 90.61\%     \\ \hline
+SVM                                  & 86.43\%           & 78.41\%            & 67.43\%         & 55.21\%     \\ \hline
+RNN                                  & 79.21\%           & 94.13\%            & 80.03\%         & 75.79\%     \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+In this section wrap up your project and give a summary of the work that was done. Then, as if you were going to continue working on this project, describe what your next steps would be in its development, what challenges remain, and what’s most important in your opinion to work on next. 
+
+\section{Acknowledgements}
+In this section you can acknowledge any sources of assistance, funding or partnership that made this research work possible. This section is optional, and if not applicable it can be removed.
+
+
+
+% single-column figure
+\begin{figure}[H] % use [H] to force a figure/table/equation/etc to render [H]ere
+\centering
+\includegraphics[width=\columnwidth]{transformer.png}
+\caption{Example of an image in a single column.}
+\label{fig:image}
+\end{figure}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. \cite{goodfellow2014generative}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. \cite{hu2021lora}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. \cite{hao2023reasoning}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. \cite{xiang2023language}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. \cite{vicuna2023}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. \cite{alayrac2022flamingo}
+
+\newpage
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

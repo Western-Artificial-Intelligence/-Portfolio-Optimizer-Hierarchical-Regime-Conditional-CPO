@@ -4,7 +4,7 @@
 
 ## High-Level Design
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    Data Layer                                │
 │  Bloomberg CSVs → data_loader.py → features.py              │
@@ -20,46 +20,46 @@
           │  Monthly rebalance      │
           │  5-year lookback        │
           │                         │
-          │  Output: W_aggressive   │
+          │  Output: W_clone        │
           └────────────┬────────────┘
                        │
           ┌────────────▼────────────┐
           │  Layer 2: The Supervisor│
-          │   (supervisor.py)       │
+          │   (gnn_supervisor.py)   │
           │                         │
           │  ┌───────────────────┐  │
-          │  │ Feature Eng.      │  │
-          │  │ (forecaster.py)   │  │
-          │  │ Vol, Vol-of-Vol,  │  │
-          │  │ Dispersion, EWMA  │  │
+          │  │ LSTM Temporal     │  │
+          │  │ Encoder (20 days) │  │
           │  └───────┬───────────┘  │
           │          │              │
           │  ┌───────▼───────────┐  │
-          │  │ XGBoost Classifier│  │
-          │  │ Meta-Labeling     │  │
-          │  │ TimeSeriesSplit CV│  │
+          │  │ Graph Attn (GAT)  │  │
+          │  │ Spatial Predictor │  │
+          │  │ (33 nodes, fully  │  │
+          │  │  connected graph) │  │
           │  └───────┬───────────┘  │
           │          │              │
-          │  Output: P ∈ [0, 1]    │
-          │  (confidence score)     │
+          │  Output: α_t ∈ [0, 1]  │
+          │  (blending coefficient) │
           └────────────┬────────────┘
                        │
           ┌────────────▼────────────┐
           │   Execution Logic       │
           │                         │
-          │  W_final = P × W_agg   │
-          │    + (1-P) × W_def     │
+          │  W_final = α_t * W_clone│
+          │    + (1 - α_t) * Cash  │
           │                         │
-          │  Continuous blending    │
-          │  between aggressive     │
-          │  and defensive alloc.   │
+          │  End-to-end training    │
+          │  to directly maximize   │
+          │  the Sharpe ratio.      │
           └────────────┬────────────┘
                        │
           ┌────────────▼────────────┐
           │   Validation Layer      │
           │                         │
-          │  Backtester             │
-          │  SHAP Analysis          │
+          │  Walk-Forward CV        │
+          │  (4 Expanding Folds)    │
+          │                         │
           │  Synthetic Validation   │
           │  (1,000 bootstrapped    │
           │   market histories)     │
@@ -70,42 +70,45 @@
 
 | Module | Role |
 |--------|------|
-| `config.py` | Central config: paths, tickers, date splits, constraints |
+| `config.py` | Central config: paths, tickers, hyperparameters, constraints |
 | `data_loader.py` | Parses Bloomberg CSVs (multi-level headers, macro data) |
-| `features.py` | Returns computation, macro merge, rolling stats, sparse ticker filter |
-| `forecaster.py` | Uncertainty feature engineering (rolling vol proxies) |
-| `qp_solver.py` | Layer 1: QP tracking error minimization with CVXPY/OSQP |
-| `supervisor.py` | Layer 2: meta-labels, super-state features, XGBoost, execution |
-| `backtester.py` | Performance metrics (Sharpe, Sortino, MaxDD, Calmar, TE) |
-| `eda.py` | All visualization (heatmaps, cumulative returns, regime plots) |
-| `main.py` | Pipeline runner: Phase 1 → Phase 2 → Phase 3 |
+| `features.py` | Returns computation, macro merge, normalization |
+| `qp_solver.py` | Layer 1: QP tracking error minimization with OSQP |
+| `gnn_model.py` | Layer 2: PyTorch models (LSTM + GAT architecture) |
+| `gnn_train.py` | End-to-end training loop with Sharpe ratio loss function |
+| `gnn_supervisor.py`| Inference and execution logic generating daily $\alpha_t$ |
+| `synthetic_validation.py` | Robustness testing using stationary block bootstrap |
+| `backtester.py` | Performance metrics (Sharpe, MaxDD, Calmar, Turnover) |
+| `main.py` | Pipeline runner combining Worker and Supervisor outputs |
 
 ## Key Design Decisions
 
-1. **Separation of concerns**: Worker knows nothing about regimes; Supervisor knows nothing about stock selection. Each layer can be independently validated.
+1. **Separation of Concerns**: The Worker knows nothing about regimes; it solely minimizes tracking error in normal conditions. The Supervisor knows nothing about individual stock selection; it solely modulates overall portfolio risk based on macro conditions.
 
-2. **Continuous vs. binary output**: The Supervisor outputs a smooth probability P ∈ [0,1] rather than a binary regime switch, reducing turnover and enabling proportional hedging.
+2. **Continuous Blending ($\alpha_t$)**: The Supervisor outputs a smooth confidence signal $\alpha_t \in [0,1]$ rather than a binary regime switch, reducing turnover and enabling proportional hedging into cash during correlation spikes.
 
-3. **Rolling volatility over DeepAR**: We use computationally simple rolling estimators (vol, vol-of-vol, EWMA variance) that capture the same uncertainty signal as probabilistic forecasting, with better interpretability.
+3. **Label-Free Training**: Unlike prior architectures that required noisy binary meta-labels (e.g., XGBoost), the GNN is trained end-to-end to directly maximize the differentiable annualized Sharpe ratio: $\mathcal{L} = -\text{Sharpe} \times \sqrt{252} + \lambda \cdot \overline{|\Delta\alpha|}$.
 
-4. **Synthetic validation**: Strategy robustness is tested on 1,000 bootstrapped market histories (Chan 2018), not just a single historical backtest.
+4. **Emergent Regime Detection**: Regime detection is not pre-defined by thresholds. The GAT attention mechanism learns which cross-asset relationships matter dynamically. The model autonomously drops $\alpha_t$ during crises (like COVID-19) as a consequence of Sharpe maximization.
+
+5. **Robust Validation**: Strategy robustness is tested on 1,000 bootstrapped synthetic market histories (Chan 2018) combined with four-fold expanding walk-forward cross-validation.
 
 ## Data Flow
 
-```
-Bloomberg Terminal
+```text
+Bloomberg Terminal Data (CSVs)
     ↓
-CSV files (data/)
+data_loader.py & features.py → Cleaned Prices, Returns, Macro Features
     ↓
-data_loader.py → prices, profiles, econ, yield_curve
+qp_solver.py → w_clone (Base Portfolio Weights)
     ↓
-features.py → returns, merged macro features
+[Training Phase]
+gnn_train.py → Learns LSTM + GAT weights to maximize Sharpe
     ↓
-qp_solver.py → weight_history, clone_returns (Layer 1)
+[Inference Phase]
+gnn_supervisor.py → Daily $\alpha_t$ blending values
     ↓
-forecaster.py → uncertainty features
-supervisor.py → confidence scores, regime, supervised_returns (Layer 2)
+synthetic_validation.py → 1,000 stress-tested market simulations
     ↓
-backtester.py → metrics comparison
-eda.py → plots saved to results/
+backtester.py → Final portfolio performance metrics
 ```

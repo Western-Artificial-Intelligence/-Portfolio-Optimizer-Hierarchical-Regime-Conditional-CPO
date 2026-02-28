@@ -1,0 +1,4 @@
+Strategy,Sharpe,CI_lower,CI_upper
+Clone + GNN Supervisor,1.231,0.476,2.012
+Clone (Worker only),0.802,0.023,1.749
+SPY Buy & Hold,0.846,0.111,1.633

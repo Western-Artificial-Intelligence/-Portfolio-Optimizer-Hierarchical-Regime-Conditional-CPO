@@ -1,0 +1,8 @@
+experiment,features_removed,features_remaining,sharpe,max_drawdown,ann_return
+Full Model (Baseline),0,38,0.377,-23.86,7.16
+Remove Volatility,14,24,0.598,-23.71,10.31
+Remove Macro (MOVE/DXY),6,32,0.373,-21.94,7.02
+Remove Yield Curve,6,32,0.382,-24.52,7.11
+Remove Credit Spreads,6,32,0.325,-26.6,6.7
+Remove Downside Risk,1,37,0.372,-25.42,7.31
+Remove Momentum,3,35,0.367,-26.17,7.03
