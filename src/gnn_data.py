@@ -180,7 +180,7 @@ def build_sliding_windows(node_feat_array, window=20):
     """
     Convert [T, N, F] array into sliding windows.
 
-    Window i uses node_feat_array[i : i+window] → shape [window, N, F].
+    Window i uses node_feat_array[i : i+window] -> shape [window, N, F].
     Prediction date for window i = dates[i + window] (next day after window).
 
     Returns
@@ -250,7 +250,7 @@ class GNNDataset(Dataset):
 def build_graph_dataset(returns, all_fields, profiles, econ, yield_curve,
                         worker_returns=None, window=20):
     """
-    Full pipeline: raw data → (windows, worker_returns_aligned, edge_index, dates).
+    Full pipeline: raw data -> (windows, worker_returns_aligned, edge_index, dates).
 
     Parameters
     ----------
@@ -293,7 +293,7 @@ def build_graph_dataset(returns, all_fields, profiles, econ, yield_curve,
     edge_index = build_fully_connected_edges(n_nodes)
 
     print(f"[gnn_data] Windows: {windows.shape[0]} samples "
-          f"(date range: {window_dates[0].date()} → {window_dates[-1].date()})")
+          f"(date range: {window_dates[0].date()} -> {window_dates[-1].date()})")
     print(f"[gnn_data] Edges: {edge_index.shape[1]} directed edges "
           f"(fully connected, {n_nodes} nodes)")
 
