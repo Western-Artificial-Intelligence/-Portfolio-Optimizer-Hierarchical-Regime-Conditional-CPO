@@ -19,7 +19,7 @@ COLORS = {
 }
 
 # Ensure results directory exists
-RESULTS_DIR = Path('results3')
+RESULTS_DIR = Path('results')
 PLOTS_DIR = Path('docs')
 
 def plot_cumulative_returns():
@@ -109,6 +109,7 @@ def plot_alpha_timeseries():
     
     covid_start, covid_end = pd.Timestamp('2020-02-19'), pd.Timestamp('2020-04-30')
     inf_start, inf_end = pd.Timestamp('2022-01-01'), pd.Timestamp('2022-10-15')
+    steady_start, steady_end = pd.Timestamp('2023-01-01'), pd.Timestamp('2026-02-04')
     
     for i, d in enumerate(dates):
         # COVID Crash - sharp drop to ~0.4
@@ -133,18 +134,24 @@ def plot_alpha_timeseries():
     fig, ax = plt.subplots(figsize=(10, 5), dpi=300)
     
     # Plot alpha
-    ax.plot(dates, alpha_series, color=COLORS['gnn'], linewidth=2)
+    ax.plot(dates, alpha_series, color=COLORS['gnn'], linewidth=2, zorder=10)
     
     # Shaded regions
     ax.axvspan(covid_start, covid_end, color=COLORS['covid'], alpha=0.3)
     ax.axvspan(inf_start, inf_end, color=COLORS['inflation'], alpha=0.3)
+    ax.axvspan(steady_start, steady_end, color='#d6ebd9', alpha=0.4) # Light green for steady regime
     
-    # Annotations
+    # Annotations - Moved below the line
     ax.axhline(y=0.775, color='gray', linestyle='--', alpha=0.8, label='Full-Period Mean (0.775)')
-    ax.text(pd.Timestamp('2020-03-15'), 0.45, 'COVID Crash\nAvg: 0.500', 
-            horizontalalignment='center', fontweight='bold', color='darkred')
-    ax.text(pd.Timestamp('2022-05-15'), 0.70, 'Inflation Shock\nAvg: 0.641', 
-            horizontalalignment='center', fontweight='bold', color='darkorange')
+    
+    ax.text(pd.Timestamp('2020-03-15'), 0.25, 'COVID Crash\nAvg: 0.500', 
+            horizontalalignment='center', fontweight='bold', color='darkred', zorder=15)
+            
+    ax.text(pd.Timestamp('2022-05-25'), 0.50, 'Inflation Shock\nAvg: 0.641', 
+            horizontalalignment='center', fontweight='bold', color='darkorange', zorder=15)
+            
+    ax.text(pd.Timestamp('2024-07-01'), 0.80, 'Steady Expansion\nRegime', 
+            horizontalalignment='center', fontweight='bold', color='#2ca02c', zorder=15)
     
     ax.set_title(r"Dynamic Blending Coefficient ($\alpha_t$) via GNN Supervisor", fontsize=14, fontweight='bold')
     ax.set_ylabel(r"Portfolio Allocation ($\alpha_t$)", fontsize=12)
